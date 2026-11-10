@@ -17,6 +17,23 @@
   text-decoration-color: var(--ink);
 }
 
+.login__forgot {
+  align-self: flex-end;
+  margin-top: -11px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  transition: color 0.15s var(--ease);
+}
+
+.login__forgot:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
+
 .auth__trial--quiet {
   display: flex;
   flex-direction: column;

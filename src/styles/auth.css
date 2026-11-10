@@ -290,6 +290,17 @@
   flex: none;
 }
 
+.auth__alert--info {
+  border-color: #dce9a8;
+  background: var(--lime-soft);
+  color: #3d5310;
+}
+
+.auth__alert--info .auth__alert-icon {
+  background: #3d5310;
+  color: var(--lime);
+}
+
 .auth__alert-hint {
   margin-top: 6px;
   font-size: 0.75rem;

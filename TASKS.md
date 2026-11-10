@@ -29,45 +29,133 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Decisions and blockers
 
-- [ ] **T01 — Confirm auth transport and endpoint names** · S · deps: none · §5.1.2, §9.2
-  - Decide between the doc's HttpOnly session cookie and the current localStorage bearer token.
-  - Confirm `signup` vs `register`, logout, refresh, and `/auth/me` shapes with the backend.
+- [x] **T01 — Confirm auth transport and endpoint names** · S · deps: none · §5.1.2, §9.2
+  - Confirmed against live `GET /openapi.json`: `HTTPBearer` JWT, not a session cookie.
+  - Confirmed `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me`.
+  - Confirmed request/response schemas (`RegisterRequest`, `LoginRequest`, `TokenPair`, `MeResponse`)
+    match `src/lib/api.js` and `src/lib/auth.js`.
   - Done when: the decision is recorded in the README and the API client matches it.
 
-- [ ] **T02 — Restore backend sources or approve mock-first development** · blocker · §11.2
-  - `ReyvoAPI/ReyvoApi/src/reyvo/*.py` is currently missing; only `__pycache__` remains.
-  - Either restore the sources and start the API, or explicitly approve building against mocks.
+- [x] **T02 — Restore backend sources or approve mock-first development** · blocker · §11.2
+  - Backend is running on `:8000`; `/health` and `/health/ready` both return `ok`.
+  - Live login with the seeded demo account works; `/auth/me` returns the expected user/tenant/role.
+  - Login was also exercised through the real UI: `/login` → `/welcome`, real tenant rendered.
   - Done when: the API responds on `:8000` **or** mock-first is approved and T03 starts.
 
 ## Foundation
 
-- [ ] **T03 — API contract map and mock adapter** · L · deps: T02 · §9
-  - Map every endpoint the UI will use: auth, tenant, members, companies, contacts, imports, lists,
-    segments, suppressions, inboxes, campaigns, AI, replies, pipeline, tasks, reports, billing, admin.
-  - Add fixtures and a `VITE_API_MODE=mock` adapter (or MSW) that follows the documented envelope.
-  - Done when: product screens can run without the real API and the endpoint map is documented.
+- [x] **T03 — API contract map and client baseline** · M · deps: T01, T02 · §9
+  - Captured the live OpenAPI 3.1 schema (62 paths, 97 schemas) to `docs/openapi.json`.
+  - Documented auth, error envelope, pagination, filters, enums, endpoint map, and known gaps in
+    `docs/API_CONTRACT.md`; added `npm run sync:openapi`.
+  - Hardened `src/lib/api.js`: proactive refresh, refresh-on-401 with a shared in-flight refresh and
+    one retry, session expiry notification, abort handling, and `api.get/post/patch/delete`.
+  - Verified in the browser: a corrupted access token triggers one `/auth/refresh` then a `200`
+    retry; a rejected refresh clears the session and lands on `/login` with an explanatory notice.
+  - Done when: the contract doc exists and the client handles auth refresh and the error envelope.
 
-- [ ] **T04 — Authenticated app shell** · M · deps: T03 · §5.8.3, §5.11
-  - Sidebar/topbar, workspace name, user menu, notification bell placeholder, mobile drawer.
-  - Add placeholder routes for every app area so navigation is never a dead end.
+- [x] **T04 — Authenticated app shell** · M · deps: T03 · §5.8.3, §5.11
+  - Built `src/pages/app/`: sticky dark sidebar, top bar with breadcrumb, notification and account
+    menus, mobile drawer with scrim, skip link, and profile loading/error states.
+  - Added a placeholder route for every area in `APP_AREAS`, plus an in-app not-found screen, so no
+    navigation is a dead end. Role-restricted links follow `/auth/me`.
+  - Signing in and the welcome CTA now open `/app`.
+  - Verified at 375 / 768 / 1024 / 1440 px with headless Chrome; Lighthouse accessibility 100 on
+    `/app`; keyboard-checked the skip link, drawer Escape/focus return, and menu toggles.
   - Done when: the shell renders at all four breakpoints with focus, keyboard, and skip-link support.
 
-- [ ] **T05 — App routing, guards, and role placeholders** · M · deps: T04 · §4.2
-  - Route table under `/app`, redirect unauthenticated users, gate owner/admin screens.
-  - Add a shared "not available for your role" state.
+- [x] **T05 — App routing, guards, and role placeholders** · M · deps: T04 · §4.2
+  - Added `AreaGuard` around every restricted route, so direct URL visits are blocked as well as
+    hidden links. Billing is owner-only; workspace settings, team, and security are owner/admin;
+    platform admin requires the `is_platform_admin` flag.
+  - Added shared pending, unverified, and access-denied states. The denied screen shows the current
+    workspace, role, and the exact requirement, plus a route back to the dashboard.
+  - The guard waits for `/auth/me` before deciding, and offers a retry when the profile request fails
+    instead of wrongly claiming the area is restricted.
+  - Verified with mocked profiles: signed-out redirects to `/login`; member and admin are blocked
+    from the right areas while shared routes still open; owner reaches billing and settings but not
+    platform admin; the platform-admin flag opens `/app/admin` without bypassing tenant roles;
+    profile failure recovers after retry. Responsive at 375 / 768 / 1024 / 1440 px; Lighthouse 100
+    for accessibility, best practices, and SEO; no console errors.
   - Done when: direct visits to each route resolve correctly for signed-out, member, admin, and owner.
 
-- [ ] **T06 — Session, tenant context, refresh, workspace switcher** · M · deps: T01, T05 · §5.1.3
-  - Central user/tenant/plan context, automatic refresh, sign-out, multi-workspace switcher.
+- [x] **T06 — Session, tenant context, refresh, workspace switcher** · M · deps: T01, T05 · §5.1.3
+  - Added a single `SessionProvider` for the signed-in app. It owns the session, `/auth/me` profile,
+    `/tenants/current` plan and tenant state, role, platform-admin flag, retry actions, workspace
+    switching, and sign-out. Guards and the shell read the same snapshot through `useSession()`.
+  - Added a sidebar workspace switcher with the current workspace, plan badge, trial-end note,
+    workspace list, a direct settings link, and **Add another workspace**. The sign-in page reopens in
+    add-workspace mode with the email prefilled and the slug field visible.
+  - The API has no tenant-list or switch endpoint, so the switcher remembers tenant-scoped sessions
+    this device has signed into under `reyvo.workspaces.v1`. A saved token is activated directly;
+    an expired one is revalidated through `/auth/refresh` and verified against the selected tenant.
+  - A switch updates the shell, navigation permissions, route guard, and plan without a reload.
+    Sign-out clears every remembered workspace token and returns to `/login`.
+  - Verified with the live demo workspace and a mocked second workspace (admin role):
+    the tenant name, role, navigation, billing denial, and plan changed without a reload, and
+    switching back restored owner permissions. Profile and plan failures show retry controls that
+    recover. Add-workspace sign-in returns to the shell and keeps only the current workspace saved.
+    Responsive at 375 / 768 / 1024 / 1440 px with the switcher inside the mobile drawer; no horizontal
+    overflow; Lighthouse 100 for accessibility, best practices, and SEO; no console errors.
   - Done when: a tenant switch updates the shell, data queries, and permissions without a reload.
 
-- [ ] **T07 — Shared UI kit** · L · deps: T04
-  - Page header, data table, filters, pagination, modal, drawer, tabs, toast, stepper, upload dropzone,
-    badge, skeleton, empty state, error panel, confirm dialog.
+- [x] **T07 — Shared UI kit** · L · deps: T04
+  - Built `src/components/ui/` with every required primitive: `PageHeader`, `DataTable`, `FilterBar` +
+    `FilterSelect`, `Pagination`, `Modal`, `Drawer`, `ConfirmDialog`, `Tabs`, `Stepper`, `ToastProvider` /
+    `useToast`, `UploadDropzone`, `Badge` / `StatusBadge`, `Skeleton`, `EmptyState`, `ErrorPanel`, plus a
+    shared `Button`. Components are generic: callers pass columns, rows, filters, steps, tabs, and file
+    handlers; no tenant or page-specific data lives in the kit.
+  - `DataTable` covers loading skeletons, empty and error states with request ids, sortable headers
+    (`aria-sort`), select-all with an indeterminate state, and keyboard row activation. `useDialogFocus`
+    locks scroll, traps Tab, closes on Escape, and returns focus to the trigger for modals, drawers, and
+    confirmations. `ConfirmDialog` starts focus on Cancel.
+  - `ToastProvider` is mounted once at the route root; toasts stack, auto-dismiss, use `status` / `alert`
+    roles, and can be dismissed by hand. `Tabs` supports arrow / Home / End keys. `Stepper` exposes
+    completed and current steps only. `UploadDropzone` validates type and size before calling back with
+    accepted and rejected files.
+  - The token-based `ui.css` includes responsive filter/pagination wrapping, an internal table scroller,
+    a stepper that stacks at 640 px, mobile dialogs, and reduced-motion rules. Status colours are shared
+    through `statusTone()` so the same state reads the same in tables, filters, and details.
+  - Added a dev-only live gallery at `/app/ui-kit` (account menu → **Component kit**) that exercises every
+    component with real state: sort/select/filter/pagination, loading/empty/error, tabs and stepper,
+    dialogs with focus return, toasts, and upload accept/reject. The route is excluded from production.
+  - Verified at 375 / 768 / 1024 / 1440 px with headless Chrome: no horizontal overflow, the table scrolls
+    inside its wrapper, filter and pagination controls stay inside the viewport, and the stepper stacks
+    at 375. Keyboard-checked tabs, drawer/modal/confirm Escape and focus return. Lighthouse 100 for
+    accessibility, best practices, and SEO on both `/app/ui-kit` and `/app`; no console errors;
+    `npm run build` passes.
   - Done when: leads, campaigns, inbox, and admin screens can be built without page-specific one-offs.
 
-- [ ] **T08 — Onboarding completion** · M · deps: T04 · §5.1.1
+- [x] **T08 — Onboarding completion** · M · deps: T04 · §5.1.1
   - Email-verification page and resend; physical-address form; interactive checklist linking to each step.
+  - Added a shared `WelcomeLayout` and `SessionProvider` route group for `/welcome`,
+    `/welcome/address`, and `/verify-email`, so all three steps share sign-out and
+    back-to-checklist actions.
+  - Checklist state comes from the API: `/auth/me` (email verification), `/tenants/current`
+    (`physical_address`), `/tenants/current/usage` (contacts and campaigns), and `/email-accounts`
+    (connected mailboxes). Rows show required, checking, and done states; a progress bar and
+    readiness banner move from “Two required steps” to “One required step”, then “Ready to import”,
+    then “Ready to send”. Every row links to its real screen.
+  - The mailing-address form validates street, city, postal code, and country, sends
+    `PATCH /tenants/current`, applies the response through `updateTenant()`, shows a toast, and
+    returns to the checklist. Invalid submits focus the first bad field; API field errors map back
+    into the form.
+  - `VerifyEmailPage` auto-verifies a `?token=`, distinguishes success, expired, and invalid links,
+    offers resend with a 30-second cooldown, and explains the signed-out state.
+  - The API has no verification or resend route. `api.verifyEmail()` and
+    `api.resendVerification()` are provisional paths; development falls back to a single-use,
+    24-hour challenge in `reyvo.onboarding.v1` with a clearly labelled “Development only” link,
+    while production reports the feature as unavailable instead of faking verification. Documented
+    in `README.md` and `docs/API_CONTRACT.md`.
+  - The app sidebar setup widget now reads the same live model through `useSetupData()` and shows
+    `2 of 5 done` instead of a hardcoded count.
+  - Verified with the demo workspace: saved and updated the address, completed the dev verification,
+    and watched `/welcome` move to “You’re ready to import contacts” (2 of 5) with the sidebar
+    matching. Checked signed-out states on all three routes, invalid and successful token states,
+    and empty-field validation. No horizontal overflow at 375 / 768 / 1024 / 1440 px; Lighthouse 100
+    for accessibility, best practices, and SEO on `/welcome`, `/welcome/address`, `/verify-email`,
+    and `/app`; no unexpected console errors (the provisional verification requests log 404s by
+    design); `npm run build` passes.
   - Done when: a new workspace can move from "just registered" to "ready to import" in the UI.
 
 - [ ] **T09 — Auth completion: reset, MFA, invite acceptance** · M · deps: T01 · §5.1.2
@@ -274,13 +362,14 @@ marketing site and auth entry pages already exist and are not repeated here.
   - Update README with app routes, mock mode, env vars, seed fixtures, and test commands.
   - Done when: a new developer can run and demo the app from a clean checkout.
 
-## Recommended first five
+## Recommended next steps
 
-1. **T01** — confirm auth transport and endpoint names.
-2. **T02** — restore the backend or approve mock-first.
-3. **T03** — API contract + mock adapter.
-4. **T04** — app shell.
-5. **T05** — routing and guards.
+1. ~~**T01** — auth transport and endpoint names~~ ✅
+2. ~~**T02** — backend restore / mock-first approval~~ ✅
+3. ~~**T03** — API contract map and client baseline~~ ✅
+4. ~~**T04** — app shell~~ ✅
+5. **T05** — routing and role guards (the signed-out redirect already exists).
+6. **T06** — session/tenant context and workspace switcher.
 
 After those, follow the milestone order: onboarding → leads/import → inboxes → campaigns → sending →
 replies/pipeline → reporting → billing/admin → hardening.

@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Logo } from '../../components/Logo'
 import { PasswordField, TextField } from '../../components/Field'
 import { ArrowLeft, ArrowRight, Check, Clock, Inbox, Send } from '../../components/icons'
 import { api, ApiError } from '../../lib/api'
-import { saveSession } from '../../lib/auth'
+import { consumeSessionExpired, saveSession } from '../../lib/auth'
+import { createMfaChallenge, getMfaStatus, hasEnabledMfa } from '../../lib/mfa'
 import { usePageTitle } from '../../lib/usePageTitle'
 import { validateLogin } from '../../lib/validation'
 import '../../styles/auth.css'
@@ -19,11 +20,22 @@ const BENEFITS = [
 export function LoginPage() {
   usePageTitle('Sign in')
   const navigate = useNavigate()
-  const [values, setValues] = useState({ email: '', password: '', tenantSlug: '' })
+  const location = useLocation()
+  const addWorkspace = location.state?.mode === 'add-workspace'
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [values, setValues] = useState({
+    email: location.state?.email ?? '',
+    password: '',
+    tenantSlug: '',
+  })
   const [errors, setErrors] = useState({})
   const [formError, setFormError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const [showSlug, setShowSlug] = useState(false)
+  const [showSlug, setShowSlug] = useState(addWorkspace)
+
+  useEffect(() => {
+    if (consumeSessionExpired()) setSessionExpired(true)
+  }, [])
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -55,7 +67,26 @@ export function LoginPage() {
       })
 
       saveSession(tokenPair)
-      navigate('/welcome', { replace: true })
+
+      // Development-only MFA gateway. The API login response has no MFA state,
+      // so a locally enrolled account is challenged after the password step.
+      if (import.meta.env.DEV && hasEnabledMfa()) {
+        try {
+          const profile = await api.me()
+          const mfaStatus = getMfaStatus(profile?.user?.id)
+          if (mfaStatus.enabled) {
+            const challenge = createMfaChallenge(profile.user.id)
+            navigate(`/mfa/challenge?challenge=${encodeURIComponent(challenge.id)}`, {
+              replace: true,
+            })
+            return
+          }
+        } catch {
+          // MFA is optional; a failed status check must not block sign-in.
+        }
+      }
+
+      navigate('/app', { replace: true })
     } catch (error) {
       if (error instanceof ApiError) {
         setFormError(error.message)
@@ -132,14 +163,47 @@ export function LoginPage() {
 
         <div className="auth__card">
           <header className="auth__head">
-            <p className="eyebrow">Sign in</p>
-            <h2>Welcome back</h2>
+            <p className="eyebrow">{addWorkspace ? 'Add workspace' : 'Sign in'}</p>
+            <h2>{addWorkspace ? 'Connect another workspace' : 'Welcome back'}</h2>
             <p>
-              New to Reyvo? <Link to="/register">Create your workspace</Link>
+              {addWorkspace ? (
+                <>
+                  This workspace will stay on this device for quick switching.{' '}
+                  <Link to="/app">Back to your workspace</Link>
+                </>
+              ) : (
+                <>
+                  New to Reyvo? <Link to="/register">Create your workspace</Link>
+                </>
+              )}
             </p>
           </header>
 
           <form className="auth__form" onSubmit={handleSubmit} noValidate>
+            {addWorkspace && !sessionExpired && !formError ? (
+              <div className="auth__alert auth__alert--info" role="status">
+                <span className="auth__alert-icon" aria-hidden="true">
+                  i
+                </span>
+                <div>
+                  <p>
+                    Use the email that belongs to the workspace, then enter its slug below.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            {sessionExpired && !formError ? (
+              <div className="auth__alert auth__alert--info" role="status">
+                <span className="auth__alert-icon" aria-hidden="true">
+                  i
+                </span>
+                <div>
+                  <p>Your session expired. Sign in again to continue where you left off.</p>
+                </div>
+              </div>
+            ) : null}
+
             {formError ? (
               <div className="auth__alert" role="alert">
                 <span className="auth__alert-icon" aria-hidden="true">
@@ -181,6 +245,10 @@ export function LoginPage() {
               error={errors.password}
               maxLength={256}
             />
+
+            <Link to="/forgot-password" className="login__forgot">
+              Forgot password?
+            </Link>
 
             {showSlug ? (
               <TextField
