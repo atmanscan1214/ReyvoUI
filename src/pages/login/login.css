@@ -1,0 +1,38 @@
+.login__slug-toggle {
+  align-self: flex-start;
+  margin-top: -4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.login__slug-toggle:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
+
+.auth__trial--quiet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+}
+
+.auth__trial--quiet p {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.auth__trial--quiet svg {
+  color: var(--lime);
+  flex: none;
+}

@@ -1,0 +1,29 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+}
+
+.logo__mark {
+  display: grid;
+  place-items: center;
+  width: var(--logo-size);
+  height: var(--logo-size);
+  border-radius: calc(var(--logo-size) * 0.3);
+  background: var(--lime);
+  color: var(--ink);
+  flex: none;
+}
+
+.logo__mark svg {
+  width: 84%;
+  height: 84%;
+}
+
+.logo__word {
+  font-size: calc(var(--logo-size) * 0.72);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
