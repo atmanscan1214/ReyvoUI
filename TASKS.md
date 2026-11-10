@@ -158,8 +158,30 @@ marketing site and auth entry pages already exist and are not repeated here.
     design); `npm run build` passes.
   - Done when: a new workspace can move from "just registered" to "ready to import" in the UI.
 
-- [ ] **T09 — Auth completion: reset, MFA, invite acceptance** · M · deps: T01 · §5.1.2
-  - Forgot/reset password, MFA enroll/challenge, invite accept page.
+- [x] **T09 — Auth completion: reset, MFA, invite acceptance** · M · deps: T01 · §5.1.2
+  - Forgot/reset password: `/forgot-password` always answers with the same neutral “if that email
+    is registered” response. `/reset-password?token=` checks the link first, then shows the
+    new-password form with strength meter and confirmation; a completed reset clears every stored
+    session. Distinct **success**, **expired**, **invalid**, and **already-used** states, plus a
+    back-to-sign-in path from the login screen.
+  - MFA: `/app/settings/security` (owner/admin) enrolls TOTP — off state, enrolling state with the
+    secret and a current-code helper, confirm step, and a disable dialog that requires a valid code.
+    Signing in with MFA on redirects to `/mfa/challenge`, which verifies one rotating code with
+    clock-drift tolerance, locks after five wrong codes, and covers **success**, **expired**,
+    **invalid**, **already-used**, **locked**, and signed-out states.
+  - Invitations: `/invite/:token` shows the invited email, workspace, role, and inviter, accepts
+    with a name, password, and terms, and covers **success**, **expired**, **invalid**, and
+    **already-accepted** states; `/invite` without a token explains the flow.
+  - The API build has none of these endpoints. Development builds call the provisional paths first,
+    then fall back to single-use, correctly time-boxed records in `reyvo.passwordResets.v1`,
+    `reyvo.mfa.v1`, and `reyvo.invites.v1` with clearly labelled “Development only” links for every
+    state; production builds report the feature as unavailable instead of faking it. Documented in
+    `README.md` and `docs/API_CONTRACT.md`.
+  - Verified end to end in the browser: requested a reset and opened the valid, expired, and
+    replayed links; created, accepted, reused, and expired an invitation; enrolled MFA, was
+    challenged at the next sign-in, submitted a wrong code (inline error), then verified and
+    continued to the workspace. Every state also checked at 375 / 768 / 1024 / 1440 px; no console
+    errors; `npm run build` passes.
   - Done when: each flow has success, expired-token, and invalid-token states.
 
 - [ ] **T10 — Account settings** · M · deps: T06 · §5.11

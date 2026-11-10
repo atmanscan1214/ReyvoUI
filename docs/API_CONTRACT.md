@@ -206,6 +206,27 @@ a local single-use challenge stored under `reyvo.onboarding.v1`; the UI labels t
 “Development only”. A production build surfaces an honest unavailable error instead of pretending the
 address was verified. When the real endpoints ship, only the adapter needs to change.
 
+### Password reset, MFA, and invitations (not implemented)
+
+The snapshot contains **no** endpoint for any of the three account-recovery flows. `src/lib/` defines
+provisional paths so the UI can be wired now and switched on when the backend lands:
+
+| Flow | Provisional endpoints | Body | Expected behaviour |
+|---|---|---|---|
+| Password reset | `POST /auth/password/forgot` | `{ email }` | Email a single-use link that expires in 30 minutes; neutral response either way |
+| Password reset | `POST /auth/password/reset` | `{ token, password }` | Set the new password, invalidate every session, or report expired / invalid / used |
+| MFA | `POST /auth/mfa/enroll` | — | Return a TOTP secret for the current user |
+| MFA | `POST /auth/mfa/verify` | `{ code }` | Accept a rotating code (with clock drift), or report locked |
+| Invitations | `POST /invites` | `{ email, role }` | Send a 7-day single-use invitation |
+| Invitations | `POST /invites/{token}/accept` | `{ full_name, password }` | Create the member, or report expired / invalid / already accepted |
+
+`src/lib/passwordReset.js`, `src/lib/mfa.js`, and `src/lib/invites.js` call these first. A `404`/`405`
+in a **development build** falls back to single-use, time-boxed records under
+`reyvo.passwordResets.v1` (30-minute links), `reyvo.mfa.v1` (10-minute enrollment, 5-minute
+challenges, 5-attempt lock), and `reyvo.invites.v1` (7-day invitations). The screens label every
+state-switching link “Development only”. Production builds surface an honest unavailable error
+instead of faking success. When the real endpoints ship, only the adapters need to change.
+
 ### Tenant, team, usage, audit
 
 | Endpoint | Purpose |
@@ -370,6 +391,9 @@ tenant timezone; display it next to the date range.
 |---|---|
 | App shell | `/auth/me`, `/tenants/current` |
 | Onboarding | `/auth/me`, `/tenants/current`, `/tenants/current/usage`, `/email-accounts` (verification: provisional) |
+| Password reset | provisional `/auth/password/*` |
+| MFA | provisional `/auth/mfa/*` |
+| Invitations | provisional `/invites` |
 | Companies | `/companies` |
 | Contacts | `/contacts`, `/contacts/{id}` |
 | Import | `/contacts/import`, `/lists` |
@@ -409,5 +433,9 @@ These are backend extension points per `DEVELOPER_GUIDE.md`; the UI must not imp
   `POST /auth/resend-verification` are provisional client paths; development builds use a local
   single-use challenge (`reyvo.onboarding.v1`) and production builds report the feature as
   unavailable. `users.email_verified_at` is returned by `/auth/me` but nothing sets it yet.
+- There are no password-reset, MFA, or invitation endpoints. The provisional paths in the table
+  above are client-side conventions; development builds keep single-use, time-boxed records in
+  `reyvo.passwordResets.v1`, `reyvo.mfa.v1`, and `reyvo.invites.v1` and production builds report the
+  feature as unavailable.
 - Sources under `ReyvoAPI/ReyvoApi/src/reyvo/*.py` were missing at capture time. The API was
   reachable from a running process, but restarting it may require restoring the sources.

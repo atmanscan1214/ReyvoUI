@@ -72,11 +72,16 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | ----------- | ------------------- | ------------------------------------------------------------ |
 | `/`         | Home                | Marketing page: hero, product mock, features, personas, process, security, pricing, FAQ, CTA |
 | `/register` | Create workspace    | Validated registration form wired to `POST /auth/register`   |
-| `/login`    | Sign in             | `POST /auth/login`, optional workspace slug                  |
+| `/login`    | Sign in             | `POST /auth/login`, optional workspace slug; challenges MFA-enrolled accounts |
+| `/forgot-password` | Forgot password | Neutral reset request; single-use 30-minute links (provisional; see below) |
+| `/reset-password` | Reset password   | New-password form from `?token=` with success, expired, invalid, and already-used states |
+| `/invite/:token` | Invitation accept | Join a workspace with a name, password, and terms (provisional; see below) |
+| `/mfa/challenge` | Two-factor challenge | Finish an MFA-protected sign-in (provisional; see below) |
 | `/welcome`  | Setup checklist     | Live onboarding checklist: five steps derived from the API, with readiness and progress |
 | `/welcome/address` | Mailing address | Required physical address form wired to `PATCH /tenants/current` |
 | `/verify-email` | Verify email    | Verification status, auto-verify from a token, and resend (provisional; see below) |
 | `/app`      | Dashboard           | Authenticated shell; placeholder overview until T38           |
+| `/app/settings/security` | Security | Two-factor enrollment, disable, and the password-reset entry point |
 | `/app/*`    | App areas           | Replies, campaigns, pipeline, contacts, mailboxes, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
@@ -105,8 +110,13 @@ src/
     home/            HomePage.jsx + home.css
     register/        RegisterPage.jsx
     login/           LoginPage.jsx + login.css
+    forgot-password/ ForgotPasswordPage.jsx
+    reset-password/  ResetPasswordPage.jsx
+    invite/          InvitePage.jsx
+    mfa/             MfaChallengePage.jsx
     welcome/         WelcomeLayout, checklist, address form, verify-email + welcome.css
     app/             AppLayout, AreaGuard, placeholder screens, navigation model, app.css
+      security/      SecurityPage.jsx + security.css
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -192,6 +202,34 @@ paths. In development, a `404`/`405` falls back to a single-use, 24-hour challen
 `reyvo.onboarding.v1` and the email screen shows the link in a clearly labelled “Development only”
 panel. Production builds never fake verification: they surface an “unavailable on this API build”
 error instead. See [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#email-verification-not-implemented).
+
+### Password reset, invitations, and two-factor authentication
+
+Three account flows share the `AuthFlowShell` layout used by sign-in: a brand panel, a status panel,
+and clearly labelled development tools.
+
+- **Password reset** — `/forgot-password` always answers with the same neutral “if that email is
+  registered” response, whether or not the account exists. `/reset-password?token=` checks the link
+  first and renders one of: the new-password form (with strength meter and confirmation), an
+  **expired** state, an **invalid** state, or an **already used** state after a successful reset.
+  A completed reset clears every stored session, matching the “sign out every device” promise.
+- **Invitations** — `/invite/:token` shows the invited email, workspace, role, and inviter before
+  asking for a name, password, and terms acceptance. It renders checking, success,
+  **expired**, **invalid**, and **already accepted** states; `/invite` without a token explains the
+  flow and points to sign-in.
+- **Two-factor authentication** — `/app/settings/security` (owner/admin) enrolls TOTP: it shows the
+  secret, a current-code helper, and a confirm step, and allows disabling with a valid code. Sign-in
+  redirects enrolled accounts to `/mfa/challenge`, which accepts one code with clock-drift
+  tolerance, locks after five wrong codes, and renders **expired**, **invalid**, **already used**,
+  locked, and signed-out states.
+
+The API build has none of these endpoints. Development builds call the provisional paths first,
+then fall back to single-use, correctly time-boxed records in `reyvo.passwordResets.v1`,
+`reyvo.mfa.v1`, and `reyvo.invites.v1`; each screen labels its “Development only” tools (valid,
+expired, invalid, and already-used links) so every state can be exercised without a mail server or
+an authenticator app. Production builds never fake these flows: they surface an
+“unavailable on this API build” error instead. See
+[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#password-reset-mfa-and-invitations-not-implemented).
 
 ### Shared UI kit
 
