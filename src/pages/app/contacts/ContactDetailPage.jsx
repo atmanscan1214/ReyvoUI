@@ -9,7 +9,6 @@ import {
   PageHeader,
   Skeleton,
   StatusBadge,
-  formatStatus,
   useToast,
 } from '../../../components/ui'
 import {
@@ -17,30 +16,31 @@ import {
   ArrowRight,
   Building,
   Clock,
+  Database,
   ExternalLink,
+  Globe,
+  List,
   Lock,
+  Mail,
+  MailCheck,
   Refresh,
   UserCircle,
+  Users,
 } from '../../../components/icons'
-import { companyLocation, getCompany } from '../../../lib/companies'
-import { contactDisplayName, deleteContact, getContact } from '../../../lib/contacts'
+import { getCompany, withScheme } from '../../../lib/companies'
+import {
+  EMAIL_STATUS_COPY,
+  TAG_STORAGE_AVAILABLE,
+  deleteContact,
+  formatContactDate,
+  formatContactDateTime,
+  getContact,
+  getContactTags,
+} from '../../../lib/contacts'
 import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
 import { ContactFormModal } from './ContactFormModal'
 import './contacts.css'
-
-function formatDate(value) {
-  if (!value) return '—'
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }).format(new Date(value))
-  } catch {
-    return '—'
-  }
-}
 
 function Fact({ label, children }) {
   return (
@@ -67,8 +67,8 @@ function DetailSkeleton() {
         <section className="app-card">
           <Skeleton variant="text" width="30%" height={16} />
           <div className="contact-detail__skeleton-lines">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <Skeleton key={index} variant="text" width={`${60 + (index % 3) * 12}%`} />
+            {Array.from({ length: 7 }).map((_, index) => (
+              <Skeleton key={index} variant="text" width={`${58 + (index % 3) * 14}%`} />
             ))}
           </div>
         </section>
@@ -104,19 +104,15 @@ export function ContactDetailPage() {
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
-  // Company context. Contact records only carry company_id, so the linked
-  // company is fetched exactly once the contact is ready.
   const [company, setCompany] = useState(null)
   const [companyStatus, setCompanyStatus] = useState('idle')
-  const [companyError, setCompanyError] = useState(null)
-  const [companyRefresh, setCompanyRefresh] = useState(0)
 
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
 
-  usePageTitle(contact ? contactDisplayName(contact) : 'Contact')
+  usePageTitle(contact?.fullName || 'Contact')
 
   // Wait for the profile before calling the role read-only.
   const roleKnown = profileStatus === 'ready'
@@ -146,13 +142,12 @@ export function ContactDetailPage() {
   useEffect(() => {
     if (!contact?.companyId) {
       setCompany(null)
-      setCompanyStatus(contact ? 'none' : 'idle')
+      setCompanyStatus('idle')
       return undefined
     }
 
     const controller = new AbortController()
     setCompanyStatus('loading')
-    setCompanyError(null)
 
     getCompany(contact.companyId, controller.signal)
       .then((data) => {
@@ -161,15 +156,12 @@ export function ContactDetailPage() {
       })
       .catch((caught) => {
         if (caught?.name === 'AbortError') return
-        setCompanyError(caught)
-        setCompanyStatus(caught?.status === 404 ? 'missing' : 'error')
+        setCompany(null)
+        setCompanyStatus('error')
       })
 
     return () => controller.abort()
-    // The company follows the contact's link; edits that keep the same
-    // company do not need a refetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contact?.companyId, companyRefresh])
+  }, [contact?.companyId])
 
   async function handleDelete() {
     setDeleting(true)
@@ -178,7 +170,10 @@ export function ContactDetailPage() {
     try {
       await deleteContact(contact.id)
       toast.success('Contact deleted.')
-      navigate('/app/contacts', { replace: true })
+      navigate(
+        contact.companyId ? `/app/contacts?company_id=${contact.companyId}` : '/app/contacts',
+        { replace: true },
+      )
     } catch (caught) {
       setDeleteError(
         caught?.status === 403
@@ -279,31 +274,40 @@ export function ContactDetailPage() {
     )
   }
 
+  const tags = getContactTags(contact.id)
   const customFields = Object.entries(contact.customFields ?? {})
-  const initials =
-    contact.fullName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0])
-      .join('')
-      .toUpperCase() || contact.email.slice(0, 2).toUpperCase()
+  const initials = contact.fullName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+  const companyLocation = company
+    ? [company.city, company.state, company.country].filter(Boolean).join(', ')
+    : ''
+  // If the company request is still in flight (or failed), keep the edit form
+  // showing that a company is attached instead of dropping into search mode.
+  const companyForForm =
+    company ??
+    (contact.companyId ? { id: contact.companyId, name: 'Company on file', domain: null } : null)
 
   return (
     <div className="app-page contacts-page">
       <PageHeader
-        eyebrow="Contacts"
-        title={contactDisplayName(contact)}
+        eyebrow={`Contacts${contact.title ? ` · ${contact.title}` : ''}`}
+        title={contact.fullName}
         backTo="/app/contacts"
         backLabel="Contacts"
-        description={[contact.title, contact.email].filter(Boolean).join(' · ') || 'Contact record'}
+        description={contact.email}
         meta={
           <>
             <StatusBadge status={contact.status} />
-            <StatusBadge
-              status={contact.emailStatus}
-              label={`Email ${formatStatus(contact.emailStatus)}`}
-            />
+            {company ? (
+              <Badge tone="outline" dot>
+                {company.name}
+              </Badge>
+            ) : null}
           </>
         }
         actions={
@@ -332,7 +336,7 @@ export function ContactDetailPage() {
           <section className="app-card contact-detail__card" aria-labelledby="contact-overview">
             <header className="contact-detail__head">
               <span className="contact-detail__avatar" aria-hidden="true">
-                {initials}
+                {initials || <UserCircle size={20} />}
               </span>
               <div>
                 <h2 id="contact-overview">Overview</h2>
@@ -343,27 +347,55 @@ export function ContactDetailPage() {
             <dl className="contact-facts">
               <Fact label="Email">
                 {contact.email ? (
-                  <a className="contact-facts__link" href={`mailto:${contact.email}`}>
+                  <ExternalLinkRow href={`mailto:${contact.email}`}>
                     {contact.email}
+                  </ExternalLinkRow>
+                ) : null}
+              </Fact>
+              <Fact label="Phone">
+                {contact.phone ? (
+                  <a className="contact-facts__link" href={`tel:${contact.phone}`}>
+                    {contact.phone}
                   </a>
                 ) : null}
               </Fact>
-              <Fact label="Title">{contact.title}</Fact>
-              <Fact label="Phone">{contact.phone}</Fact>
-              <Fact label="First name">{contact.firstName}</Fact>
-              <Fact label="Last name">{contact.lastName}</Fact>
               <Fact label="LinkedIn">
                 {contact.linkedinUrl ? (
-                  <ExternalLinkRow href={/^https?:\/\//i.test(contact.linkedinUrl)
-                    ? contact.linkedinUrl
-                    : `https://${contact.linkedinUrl}`}>
+                  <ExternalLinkRow href={withScheme(contact.linkedinUrl)}>
                     {contact.linkedinUrl.replace(/^https?:\/\//, '')}
                   </ExternalLinkRow>
                 ) : null}
               </Fact>
+              <Fact label="Company">
+                {contact.companyId ? (
+                  <Link
+                    to={`/app/companies/${contact.companyId}`}
+                    className="contact-facts__link"
+                  >
+                    {company?.name ?? 'View company'}
+                    <ArrowRight size={13} aria-hidden="true" />
+                  </Link>
+                ) : null}
+              </Fact>
+              <Fact label="Job title">{contact.title}</Fact>
+              <Fact label="Status">
+                <StatusBadge status={contact.status} size="sm" />
+              </Fact>
+              <Fact label="Email health">
+                <span className="contact-detail__badge-line">
+                  <StatusBadge status={contact.emailStatus} size="sm" dot={false} />
+                  <span className="contacts__muted">
+                    {EMAIL_STATUS_COPY[contact.emailStatus] ?? 'Not verified yet.'}
+                  </span>
+                </span>
+              </Fact>
               <Fact label="Source">{contact.source}</Fact>
-              <Fact label="Added">{formatDate(contact.createdAt)}</Fact>
-              <Fact label="Updated">{formatDate(contact.updatedAt)}</Fact>
+              <Fact label="Last contacted">
+                {formatContactDateTime(contact.lastContactedAt)}
+              </Fact>
+              <Fact label="Last replied">{formatContactDateTime(contact.lastRepliedAt)}</Fact>
+              <Fact label="Added">{formatContactDate(contact.createdAt)}</Fact>
+              <Fact label="Updated">{formatContactDate(contact.updatedAt)}</Fact>
             </dl>
           </section>
 
@@ -374,7 +406,7 @@ export function ContactDetailPage() {
               </span>
               <div>
                 <h2 id="contact-notes">Notes</h2>
-                <p>Shared context for anyone working this contact.</p>
+                <p>Shared context for anyone working this person.</p>
               </div>
             </header>
 
@@ -387,10 +419,49 @@ export function ContactDetailPage() {
             )}
           </section>
 
+          <section className="app-card contact-detail__card" aria-labelledby="contact-tags">
+            <header className="contact-detail__head">
+              <span className="contact-detail__icon" aria-hidden="true">
+                <List size={18} />
+              </span>
+              <div>
+                <h2 id="contact-tags">Tags</h2>
+                <p>Lightweight labels for segments and saved views.</p>
+              </div>
+              {TAG_STORAGE_AVAILABLE ? (
+                <Badge tone="outline" size="sm">
+                  Browser only
+                </Badge>
+              ) : null}
+            </header>
+
+            {tags.length > 0 ? (
+              <ul className="contact-detail__tags">
+                {tags.map((tag) => (
+                  <li key={tag}>
+                    <Badge tone="outline">{tag}</Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="contact-detail__empty">
+                {TAG_STORAGE_AVAILABLE
+                  ? `No tags yet. ${canWrite ? 'Edit the contact to add some.' : ''}`
+                  : 'Tags need a tags endpoint, which this API build does not expose.'}
+              </p>
+            )}
+
+            {TAG_STORAGE_AVAILABLE ? (
+              <p className="contact-detail__hint">
+                This API build has no tags endpoint, so tags are stored in this browser only.
+              </p>
+            ) : null}
+          </section>
+
           <section className="app-card contact-detail__card" aria-labelledby="contact-custom">
             <header className="contact-detail__head">
               <span className="contact-detail__icon" aria-hidden="true">
-                <UserCircle size={18} />
+                <Database size={18} />
               </span>
               <div>
                 <h2 id="contact-custom">Custom fields</h2>
@@ -422,121 +493,119 @@ export function ContactDetailPage() {
               </span>
               <div>
                 <h2 id="contact-company">Company</h2>
-                <p>The employer this contact belongs to.</p>
+                <p>The employer record this person belongs to.</p>
               </div>
-              {companyStatus === 'ready' ? (
-                <Badge tone="neutral" size="sm">
-                  {company.name}
-                </Badge>
-              ) : null}
             </header>
 
-            {(companyStatus === 'loading' || companyStatus === 'idle') ? (
+            {!contact.companyId ? (
+              <p className="contact-detail__empty">
+                No company attached. {canWrite ? 'Edit the contact to add one.' : ''}
+              </p>
+            ) : companyStatus === 'loading' ? (
               <div className="contact-detail__skeleton-lines">
                 <Skeleton variant="text" width="80%" />
                 <Skeleton variant="text" width="62%" />
               </div>
-            ) : companyStatus === 'none' ? (
-              <p className="contact-detail__empty">
-                No company attached. {canWrite ? 'Edit the contact to link one.' : ''}
-              </p>
-            ) : companyStatus === 'missing' ? (
-              <p className="contact-detail__empty">
-                The linked company is no longer available in this workspace.
-              </p>
-            ) : companyStatus === 'error' ? (
+            ) : companyStatus === 'error' || !company ? (
               <div className="contact-detail__inline-error" role="alert">
                 <AlertCircle size={15} aria-hidden="true" />
-                <span>
-                  {companyError?.message || 'We could not load the company for this contact.'}
-                </span>
-                <button
-                  type="button"
-                  className="contact-detail__inline-retry"
-                  onClick={() => setCompanyRefresh((key) => key + 1)}
-                >
-                  Retry
-                </button>
+                <span>We could not load the company for this contact.</span>
               </div>
             ) : (
               <>
-                <dl className="contact-facts">
-                  <div className="contact-facts__row">
-                    <dt>Name</dt>
-                    <dd>
-                      <Link to={`/app/companies/${company.id}`} className="contact-facts__link">
-                        {company.name}
-                        <ArrowRight size={13} aria-hidden="true" />
-                      </Link>
-                    </dd>
+                <div className="contact-company-card">
+                  <span className="contact-company-card__avatar" aria-hidden="true">
+                    {company.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="contact-company-card__main">
+                    <Link
+                      to={`/app/companies/${company.id}`}
+                      className="contact-company-card__name"
+                    >
+                      {company.name}
+                    </Link>
+                    <p className="contact-company-card__meta">
+                      {[company.domain, company.industry].filter(Boolean).join(' · ') || 'Company'}
+                    </p>
                   </div>
-                  <Fact label="Domain">
-                    {company.domain ? (
-                      <ExternalLinkRow href={`https://${company.domain}`}>
-                        {company.domain}
+                </div>
+
+                <dl className="contact-facts contact-facts--compact contact-facts--card">
+                  <Fact label="Industry">{company.industry}</Fact>
+                  <Fact label="Location">{companyLocation}</Fact>
+                  <Fact label="Employees">
+                    {company.employeeCount == null
+                      ? null
+                      : company.employeeCount.toLocaleString()}
+                  </Fact>
+                  <Fact label="Website">
+                    {company.website ? (
+                      <ExternalLinkRow href={withScheme(company.website)}>
+                        {company.website.replace(/^https?:\/\//, '')}
                       </ExternalLinkRow>
                     ) : null}
                   </Fact>
-                  <Fact label="Industry">{company.industry}</Fact>
-                  <Fact label="Employees">
-                    {company.employeeCount == null ? null : company.employeeCount.toLocaleString()}
-                  </Fact>
-                  <Fact label="Location">{companyLocation(company)}</Fact>
-                  <div className="contact-facts__row">
-                    <dt>Status</dt>
-                    <dd>
-                      <StatusBadge status={company.status} size="sm" />
-                    </dd>
-                  </div>
                 </dl>
 
-                <Link
-                  to={`/app/contacts?company_id=${company.id}`}
-                  className="contact-detail__link"
-                >
-                  All contacts at {company.name}
-                  <ArrowRight size={15} aria-hidden="true" />
-                </Link>
+                <div className="contact-detail__link-row">
+                  <Link to={`/app/companies/${company.id}`} className="contact-detail__link">
+                    Open company record
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </Link>
+                  <Link
+                    to={`/app/contacts?company_id=${company.id}`}
+                    className="contact-detail__link"
+                  >
+                    <Users size={15} aria-hidden="true" />
+                    All people there
+                  </Link>
+                </div>
               </>
             )}
           </section>
 
-          <section className="app-card contact-detail__card" aria-labelledby="contact-activity">
+          <section className="app-card contact-detail__card" aria-labelledby="contact-health">
             <header className="contact-detail__head">
               <span className="contact-detail__icon" aria-hidden="true">
-                <Clock size={18} />
+                <MailCheck size={18} />
               </span>
               <div>
-                <h2 id="contact-activity">Activity</h2>
-                <p>Outreach history for this contact.</p>
+                <h2 id="contact-health">Email health</h2>
+                <p>Whether this address is safe to include in a campaign.</p>
               </div>
             </header>
 
-            <dl className="contact-facts">
-              <div className="contact-facts__row">
-                <dt>Last contacted</dt>
-                <dd>
-                  {contact.lastContactedAt ? (
-                    formatDate(contact.lastContactedAt)
-                  ) : (
-                    <span className="contacts__muted">Not yet contacted</span>
-                  )}
-                </dd>
-              </div>
-              <div className="contact-facts__row">
-                <dt>Last replied</dt>
-                <dd>
-                  {contact.lastRepliedAt ? (
-                    formatDate(contact.lastRepliedAt)
-                  ) : (
-                    <span className="contacts__muted">No replies yet</span>
-                  )}
-                </dd>
-              </div>
-            </dl>
+            <div className="contact-health">
+              <StatusBadge status={contact.emailStatus} />
+              <p className="contact-health__copy">
+                {EMAIL_STATUS_COPY[contact.emailStatus] ?? 'This address has not been verified yet.'}
+              </p>
+            </div>
 
-            <p className="contact-detail__footnote">
-              Updated automatically as campaigns send and replies arrive.
+            <p className="contact-detail__hint">
+              Verification is not connected on this API build, so the status is set when the
+              contact is created.
+            </p>
+
+            <a className="contact-detail__link" href={`mailto:${contact.email}`}>
+              <Mail size={15} aria-hidden="true" />
+              Email {contact.email}
+            </a>
+          </section>
+
+          <section className="app-card contact-detail__card contact-detail__card--quiet">
+            <header className="contact-detail__head">
+              <span className="contact-detail__icon" aria-hidden="true">
+                <Globe size={18} />
+              </span>
+              <div>
+                <h2>Workspace record</h2>
+                <p>This contact is private to this workspace.</p>
+              </div>
+            </header>
+            <p className="contact-detail__hint">
+              Contact IDs, email normalization, and tenant separation are enforced by the API on
+              every read and write.
             </p>
           </section>
 
@@ -544,8 +613,8 @@ export function ContactDetailPage() {
             <section className="app-card contact-detail__danger" aria-labelledby="contact-danger">
               <h2 id="contact-danger">Delete contact</h2>
               <p>
-                The contact is removed from the workspace and from every list it belongs to. This
-                cannot be undone.
+                The person is removed from the workspace. Their company record and other contacts
+                stay. This cannot be undone.
               </p>
               <Button
                 variant="danger"
@@ -565,18 +634,20 @@ export function ContactDetailPage() {
       <ContactFormModal
         open={editOpen}
         contact={contact}
+        defaultCompany={companyForForm}
         onClose={() => setEditOpen(false)}
         onSaved={(saved) => {
           setContact(saved)
           setEditOpen(false)
+          setRefreshKey((key) => key + 1)
         }}
       />
 
       {deleteOpen ? (
         <ConfirmDialog
           open
-          title={`Delete ${contactDisplayName(contact)}?`}
-          description="This removes the contact record and its list memberships. The email address stays in suppression history if it was suppressed."
+          title={`Delete ${contact.fullName}?`}
+          description="This removes the contact from the workspace. Campaign history keeps its own snapshot of who was contacted."
           confirmLabel="Delete contact"
           loading={deleting}
           onCancel={() => {
