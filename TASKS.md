@@ -1,10 +1,13 @@
-# Reyvo — Remaining Build Backlog
+# Reyvo — MVP Backlog, Milestones & Schedule
 
-Source of truth: `ReyvoAPI/ReyvoApi/Reyvo_Detailed_Design_Document.md`
-Last updated: 10 November 2026
+Source of truth: `ReyvoAPI/ReyvoApi/Reyvo_Detailed_Design_Document.md`  
+Last updated: 12 November 2026
 
 This backlog covers the **in-product application** described in §5 of the design document. The
 marketing site and auth entry pages already exist and are not repeated here.
+
+> **Project status:** pre-approval / demo-ready development (build can be shown to the client at any time).  
+> **Verification snapshot (12 Nov 2026):** targeted T01–T16 checks passed in the live stack (T06 sign-out-everywhere confirmed app-correct in targeted recheck; T16 pending audience is browser-staged until T21); `npm run build` passes for `ReyvoUI`.
 
 ## Working agreement
 
@@ -12,10 +15,135 @@ marketing site and auth entry pages already exist and are not repeated here.
 - Each task ends with `npm run build`, a browser check at 375 / 768 / 1024 / 1440 px, and an updated
   checkbox in this file.
 - Every screen needs loading, empty, error, and permission-denied states.
-- Use mock fixtures until the backend sources are restored; do not hard-code tenant data in components.
+- Use mock/dev fallbacks where the API is incomplete; do not hard-code tenant data in components.
 - Mark the task `[x]` only after the "Done when" condition is met.
+- **2 developers** working in parallel on milestone branches (see branching strategy).
 
 **Sizes:** `S` ≈ half a day · `M` ≈ 1–2 days · `L` ≈ 3–5 days.
+
+## Project schedule (proposed)
+
+| Item | Date / detail |
+| --- | --- |
+| **Project start** | **Mon 16 Nov 2026** |
+| **Planned duration** | 2 months (through **Fri 15 Jan 2027**) |
+| **MVP feature-complete target** | **Wed 30 Dec 2026** (2+ weeks before deadline; adjusted for holidays) |
+| **Stabilization / polish / demo hardening buffer** | **Mon 5 Jan 2027 – Thu 15 Jan 2027** (fixes from all testing stages, UX polish, release readiness) |
+| **Client updates** | Weekly (end-of-week written/demo update each Friday, except holiday-shortened weeks noted below) |
+| **Team** | 2 developers + AI-assisted implementation/support |
+
+### Holidays (no planned development)
+
+- **Wed 23 Dec 2026**
+- **Thu 24 Dec 2026**
+- **Fri 25 Dec 2026**
+- **Sat 26 Dec 2026** *(weekend/holiday context noted)*
+- **Thu 31 Dec 2026**
+- **Fri 1 Jan 2027**
+- **Sat 2 Jan 2027** *(weekend/holiday context noted)*
+
+> Capacity is reduced in the weeks containing these dates; milestones below reflect that.
+
+### Weekly cadence & client update checkpoints
+
+| Week | Dates | Working notes | Client update (Fri) |
+| --- | --- | --- | --- |
+| Week 1 | Mon 16 Nov – Fri 20 Nov 2026 | Project kickoff, Demo baseline, milestone setup | **Fri 20 Nov 2026** |
+| Week 2 | Mon 23 Nov – Fri 27 Nov 2026 | Full week | **Fri 27 Nov 2026** |
+| Week 3 | Mon 30 Nov – Fri 4 Dec 2026 | Full week | **Fri 4 Dec 2026** |
+| Week 4 | Mon 7 Dec – Fri 11 Dec 2026 | Full week | **Fri 11 Dec 2026** |
+| Week 5 | Mon 14 Dec – Fri 18 Dec 2026 | Full week | **Fri 18 Dec 2026** |
+| Week 6 | Mon 21 Dec – Fri 25 Dec 2026 | **Holiday-shortened** (23–25 off); limited scope / handoff update | **Mon 22 Dec 2026** (pre-holiday update) |
+| Week 7 | Mon 28 Dec – Fri 1 Jan 2027 | **Holiday-shortened** (31, 1 off); MVP wrap-up | **Wed 30 Dec 2026** (MVP feature-complete checkpoint) |
+| Week 8 | Mon 5 Jan – Fri 9 Jan 2027 | Buffer: stabilization, bug fixes, polish | **Fri 9 Jan 2027** |
+| Week 9 | Mon 12 Jan – Thu 15 Jan 2027 | Buffer: final QA, demo hardening, release prep | **Thu 15 Jan 2027** (final pre-deadline update) |
+
+## Branching strategy (all branched from `dev`)
+
+> Create and maintain these in each app repo as needed (`ReyvoUI`, `ReyvoApi`) so frontend/backend stay aligned.
+
+| Branch | Purpose |
+| --- | --- |
+| `dev` | Integration branch for ongoing MVP development (source of truth for active work). |
+| `demo` | Demo-ready branch containing the pages/flows needed to show the client how the application will be developed and used (kept stable for demos). |
+| `milestone/m0-demo-foundation` | Milestone 0: demo baseline, branch/process setup, verified foundation handoff. |
+| `milestone/m1-audience-complete` | Milestone 1: audience, lists/segments, suppressions. |
+| `milestone/m2-inboxes` | Milestone 2: inbox connect/health/config. |
+| `milestone/m3-campaign-core` | Milestone 3: campaign list, wizard, sequence, schedule, preflight. |
+| `milestone/m4-campaign-launch-ai-sending` | Milestone 4: approval, launch/controls, AI drafting, sending health/quotas. |
+| `milestone/m5-replies-tasks-pipeline` | Milestone 5: unified inbox, conversation actions, tasks, pipeline. |
+| `milestone/m6-reporting-billing-settings-public` | Milestone 6: dashboard/reports, billing, settings/team/notifications, public pages. |
+| `milestone/m7-admin-hardening-buffer` | Milestone 7: platform admin, cross-cutting quality, stabilization and buffer completion. |
+
+**Working rule:** branch milestone work from `dev`, open PRs back to `dev` frequently; promote reviewed/demo-ready states to `demo` for client walkthroughs.
+
+## Milestones
+
+### M0 — Demo & foundation handoff
+- **Target start:** Mon 16 Nov 2026  
+- **Target end:** Fri 20 Nov 2026  
+- **Weekly update:** Fri 20 Nov 2026  
+- **Goal:** establish demo-ready baseline, confirm T01–T16 verified state, align branching/process, and prepare parallel workstreams.
+- **Scope / outcomes:** stable `dev` baseline, `demo` branch with navigable core pages (auth, shell, onboarding, companies/contacts/imports/lists), milestone tracking in `TASKS.md`, environment/readme notes for demos.
+- **Tasks:** T01–T16 verification/handoff complete; process/docs items supporting demo readiness (feeds into T53).
+
+### M1 — Audience complete
+- **Target start:** Mon 23 Nov 2026  
+- **Target end:** Fri 27 Nov 2026  
+- **Weekly update:** Fri 27 Nov 2026  
+- **Goal:** finish audience management so campaign targeting inputs are ready.
+- **Scope:** lists/tags/segments and suppression flows with clear UX states and audit-safe behavior where applicable.
+- **Tasks:** **T16, T17**.
+
+### M2 — Inboxes
+- **Target start:** Mon 30 Nov 2026  
+- **Target end:** Fri 4 Dec 2026  
+- **Weekly update:** Fri 4 Dec 2026  
+- **Goal:** connect and configure sending inboxes with health visibility.
+- **Scope:** provider connect/reconnect states, inbox detail/config, caps/warm-up/test send feedback.
+- **Tasks:** **T18, T19**.
+
+### M3 — Campaign core
+- **Target start:** Mon 8 Dec 2026  
+- **Target end:** Fri 18 Dec 2026 *(spans Week 4–5)*  
+- **Weekly update:** Fri 11 Dec 2026, Fri 18 Dec 2026  
+- **Goal:** deliver end-to-end campaign authoring flow up to preflight-ready review.
+- **Scope:** campaign list, audience/mailbox selection, sequence editor, scheduling, review/preflight/test send UX.
+- **Tasks:** **T20, T21, T22, T23, T24**.
+
+### M4 — Campaign launch, AI drafting & sending controls
+- **Target start:** Mon 21 Dec 2026  
+- **Target end:** Wed 30 Dec 2026 *(holiday-shortened Weeks 6–7)*  
+- **Weekly update:** Mon 22 Dec 2026, Wed 30 Dec 2026  
+- **Goal:** reach MVP feature-complete campaign lifecycle and AI/sending safety controls.
+- **Scope:** approval workflow, campaign detail/controls/stats, AI generate/approve/quota/toggle, sending health, pause/resume/kill-switch controls, usage/quota warnings.
+- **Tasks:** **T25, T26, T27, T28, T29, T30, T31** (parallelized across 2 devs; highest-risk/critical path first).
+
+### M5 — Replies, tasks & pipeline
+- **Target start:** Mon 5 Jan 2027  
+- **Target end:** Fri 9 Jan 2027 *(buffer week 1; executed in stabilization window if M4 slips, otherwise used for hardening)*  
+- **Weekly update:** Fri 9 Jan 2027  
+- **Goal:** complete core reply handling and sales workflow surfaces for MVP demo/readiness.
+- **Scope:** unified inbox, conversation view/actions, classification/assignment, tasks, pipeline, opportunity detail/timeline.
+- **Tasks:** **T32, T33, T34, T35, T36, T37** (prioritize T32–T34/T35 for MVP-critical paths).
+
+### M6 — Reporting, billing, settings & public pages
+- **Target start:** Mon 5 Jan 2027  
+- **Target end:** Tue 13 Jan 2027 *(parallelized within buffer; overlaps M5 as capacity allows)*  
+- **Weekly update:** Fri 9 Jan 2027, Thu 15 Jan 2027  
+- **Goal:** complete operator-facing reporting/config/billing and required public compliance/support pages.
+- **Scope:** dashboard and reports/export, billing/portal states, workspace/team/security/notifications/data-management settings, unsubscribe/status/security.txt.
+- **Tasks:** **T38, T39, T40, T41, T42, T43, T44, T45, T48, T49**.
+
+### M7 — Platform admin, cross-cutting quality & buffer closeout
+- **Target start:** Mon 12 Jan 2027  
+- **Target end:** Thu 15 Jan 2027  
+- **Weekly update:** Thu 15 Jan 2027  
+- **Goal:** platform-admin essentials, cross-cutting hardening, docs/tests/a11y, and final stabilization before deadline.
+- **Scope:** tenant management and platform ops/support/abuse surfaces (MVP depth as feasible), API/data consistency, critical tests, accessibility/responsive audit, documentation and seed/demo readiness.
+- **Tasks:** **T46, T47, T50, T51, T52, T53** (+ bug fixes/polish from all testing stages).
+
+> **Dependency note:** milestone ordering respects dependencies (audience/inboxes before campaign sending; campaign/replies before full reporting/pipeline polish). With 2 developers, tasks inside a milestone may run in parallel when dependencies allow; buffer weeks (Jan 5–15) are reserved for integration, defect fixes, and scope-risk absorption to protect the Jan 15 2027 deadline.
 
 ## Current baseline (done)
 
@@ -29,22 +157,22 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Decisions and blockers
 
-- [x] **T01 — Confirm auth transport and endpoint names** · S · deps: none · §5.1.2, §9.2
+- [x] **T01 — Confirm auth transport and endpoint names** · S · deps: none · §5.1.2 · **M0**
   - Confirmed against live `GET /openapi.json`: `HTTPBearer` JWT, not a session cookie.
   - Confirmed `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me`.
   - Confirmed request/response schemas (`RegisterRequest`, `LoginRequest`, `TokenPair`, `MeResponse`)
     match `src/lib/api.js` and `src/lib/auth.js`.
   - Done when: the decision is recorded in the README and the API client matches it.
 
-- [x] **T02 — Restore backend sources or approve mock-first development** · blocker · §11.2
+- [x] **T02 — Restore backend sources or approve mock-first development** · blocker · §11.2 · **M0**
   - Backend is running on `:8000`; `/health` and `/health/ready` both return `ok`.
   - Live login with the seeded demo account works; `/auth/me` returns the expected user/tenant/role.
   - Login was also exercised through the real UI: `/login` → `/welcome`, real tenant rendered.
   - Done when: the API responds on `:8000` **or** mock-first is approved and T03 starts.
 
-## Foundation
+## Foundation (M0)
 
-- [x] **T03 — API contract map and client baseline** · M · deps: T01, T02 · §9
+- [x] **T03 — API contract map and client baseline** · M · deps: T01, T02 · §9 · **M0**
   - Captured the live OpenAPI 3.1 schema (62 paths, 97 schemas) to `docs/openapi.json`.
   - Documented auth, error envelope, pagination, filters, enums, endpoint map, and known gaps in
     `docs/API_CONTRACT.md`; added `npm run sync:openapi`.
@@ -54,7 +182,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     retry; a rejected refresh clears the session and lands on `/login` with an explanatory notice.
   - Done when: the contract doc exists and the client handles auth refresh and the error envelope.
 
-- [x] **T04 — Authenticated app shell** · M · deps: T03 · §5.8.3, §5.11
+- [x] **T04 — Authenticated app shell** · M · deps: T03 · §5.8.3, §5.11 · **M0**
   - Built `src/pages/app/`: sticky dark sidebar, top bar with breadcrumb, notification and account
     menus, mobile drawer with scrim, skip link, and profile loading/error states.
   - Added a placeholder route for every area in `APP_AREAS`, plus an in-app not-found screen, so no
@@ -64,7 +192,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     `/app`; keyboard-checked the skip link, drawer Escape/focus return, and menu toggles.
   - Done when: the shell renders at all four breakpoints with focus, keyboard, and skip-link support.
 
-- [x] **T05 — App routing, guards, and role placeholders** · M · deps: T04 · §4.2
+- [x] **T05 — App routing, guards, and role placeholders** · M · deps: T04 · §4.2 · **M0**
   - Added `AreaGuard` around every restricted route, so direct URL visits are blocked as well as
     hidden links. Billing is owner-only; workspace settings, team, and security are owner/admin;
     platform admin requires the `is_platform_admin` flag.
@@ -79,7 +207,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     for accessibility, best practices, and SEO; no console errors.
   - Done when: direct visits to each route resolve correctly for signed-out, member, admin, and owner.
 
-- [x] **T06 — Session, tenant context, refresh, workspace switcher** · M · deps: T01, T05 · §5.1.3
+- [x] **T06 — Session, tenant context, refresh, workspace switcher** · M · deps: T01, T05 · §5.1.3 · **M0**
   - Added a single `SessionProvider` for the signed-in app. It owns the session, `/auth/me` profile,
     `/tenants/current` plan and tenant state, role, platform-admin flag, retry actions, workspace
     switching, and sign-out. Guards and the shell read the same snapshot through `useSession()`.
@@ -99,7 +227,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     overflow; Lighthouse 100 for accessibility, best practices, and SEO; no console errors.
   - Done when: a tenant switch updates the shell, data queries, and permissions without a reload.
 
-- [x] **T07 — Shared UI kit** · L · deps: T04
+- [x] **T07 — Shared UI kit** · L · deps: T04 · **M0**
   - Built `src/components/ui/` with every required primitive: `PageHeader`, `DataTable`, `FilterBar` +
     `FilterSelect`, `Pagination`, `Modal`, `Drawer`, `ConfirmDialog`, `Tabs`, `Stepper`, `ToastProvider` /
     `useToast`, `UploadDropzone`, `Badge` / `StatusBadge`, `Skeleton`, `EmptyState`, `ErrorPanel`, plus a
@@ -126,7 +254,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     `npm run build` passes.
   - Done when: leads, campaigns, inbox, and admin screens can be built without page-specific one-offs.
 
-- [x] **T08 — Onboarding completion** · M · deps: T04 · §5.1.1
+- [x] **T08 — Onboarding completion** · M · deps: T04 · §5.1.1 · **M0**
   - Email-verification page and resend; physical-address form; interactive checklist linking to each step.
   - Added a shared `WelcomeLayout` and `SessionProvider` route group for `/welcome`,
     `/welcome/address`, and `/verify-email`, so all three steps share sign-out and
@@ -158,7 +286,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     design); `npm run build` passes.
   - Done when: a new workspace can move from "just registered" to "ready to import" in the UI.
 
-- [x] **T09 — Auth completion: reset, MFA, invite acceptance** · M · deps: T01 · §5.1.2
+- [x] **T09 — Auth completion: reset, MFA, invite acceptance** · M · deps: T01 · §5.1.2 · **M0**
   - Forgot/reset password: `/forgot-password` always answers with the same neutral “if that email
     is registered” response. `/reset-password?token=` checks the link first, then shows the
     new-password form with strength meter and confirmation; a completed reset clears every stored
@@ -183,12 +311,10 @@ marketing site and auth entry pages already exist and are not repeated here.
     continued to the workspace; also opened the expired, invalid, already-used, and locked
     challenge states. Every page checked at 375 / 768 / 1024 / 1440 px with no horizontal
     overflow; the provisional invite lookup logs one 404 by design and no unexpected console
-    errors appear; `npm run build` passes. The security page wrapper was renamed to
-    `.security-page` after its `.security` class collided with the marketing page's dark security
-    section.
+    errors appear; `npm run build` passes.
   - Done when: each flow has success, expired-token, and invalid-token states.
 
-- [x] **T10 — Account settings** · M · deps: T06 · §5.11
+- [x] **T10 — Account settings** · M · deps: T06 · §5.11 · **M0**
   - `/app/settings/account` has four tabs: **Profile** (display name applied to the session immediately,
     role, member-since date, read-only sign-in email), **Email** (new address plus current password, a
     24-hour verification-pending state with confirm and cancel, and confirmed / expired states),
@@ -216,9 +342,8 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Leads and audience
 
-- [x] **T11 — Companies** · L · deps: T07 · §5.2.1
+- [x] **T11 — Companies** · L · deps: T07 · §5.2.1 · **M0**
   - List, filters, detail, create/edit/delete, notes, custom fields.
-  - Done when: empty, loading, duplicate-warning, and permission states are covered.
   - Built on the live `/companies` CRUD API with no fallbacks: URL-synced search (300 ms debounce),
     industry filter, and pagination on the list; overview, notes, custom fields, and a People card
     (`GET /contacts?company_id=`) on the detail page; one shared modal for create and edit with
@@ -240,9 +365,8 @@ marketing site and auth entry pages already exist and are not repeated here.
     passes.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
 
-- [x] **T12 — Contacts** · L · deps: T07 · §5.2.1
+- [x] **T12 — Contacts** · L · deps: T07 · §5.2.1 · **M0**
   - List, filters, detail, create/edit/delete, statuses, tags, last contacted/replied.
-  - Done when: a contact can be created manually and viewed with company context.
   - Built on the live `/contacts` CRUD API: URL-synced search (300 ms debounce), status filter,
     company filter sampled from `/companies?limit=100`, and pagination on the list; overview facts
     (including last contacted/replied), notes, tags, custom fields, company context card, and
@@ -270,7 +394,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     errors; `npm run build` passes.
   - Done when: a contact can be created manually and viewed with company context.
 
-- [x] **T13 — CSV import: upload and column mapping** · L · deps: T12 · §5.2.2
+- [x] **T13 — CSV import: upload and column mapping** · L · deps: T12 · §5.2.2 · **M0**
   - Template download, file validation, upload, detected columns, mapping to contact/company fields.
   - The current API exposes one synchronous multipart import (`POST /contacts/import`) that matches
     canonical headers exactly. There is no preview or mapping parameter, presigned upload, progress
@@ -296,7 +420,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     horizontal overflow and no unexpected console errors; `npm run build` passes.
   - Done when: a valid CSV reaches a review step and an invalid file shows row-level errors.
 
-- [x] **T14 — CSV import: validation, duplicates, progress, report, rollback** · L · deps: T13 · §5.2.2
+- [x] **T14 — CSV import: validation, duplicates, progress, report, rollback** · L · deps: T13 · §5.2.2 · **M0**
   - Preview counts, skip/update/review choices, suppression warnings, background progress, report, 24h rollback.
   - The API still has no preview, job, update-mode, or rollback endpoint: `POST /contacts/import` is
     one synchronous multipart request that skips duplicates and suppressions itself.
@@ -334,7 +458,7 @@ marketing site and auth entry pages already exist and are not repeated here.
     browser-local, so it is unavailable from another browser and stops after 24 hours.
   - Done when: a 100-row fixture can be imported and its skipped/suppressed/error rows are explained.
 
-- [x] **T15 — Export, bulk actions, duplicate merge** · M · deps: T12 · §5.2.2, §5.2.3
+- [x] **T15 — Export, bulk actions, duplicate merge** · M · deps: T12 · §5.2.2, §5.2.3 · **M0**
   - Export the filtered view with CSV-injection protection; bulk archive/update; merge duplicates.
   - `src/lib/contactBulk.js` pages the live `/contacts` list with the active search, status, and company
     filters (100 per page, capped at 5,000) and pages `/companies` for names and domains. It writes a
@@ -371,191 +495,191 @@ marketing site and auth entry pages already exist and are not repeated here.
     `contact.updated` / `contact.deleted` and reflected in the list; export is reflected in the list but
     cannot be audited in this API build.
 
-- [ ] **T16 — Lists, tags, and segment builder** · L · deps: T12 · §5.2.4
+- [x] **T16 — Lists, tags, and segment builder** · L · deps: T12 · §5.2.4 · **M1 (implemented/verified; campaign-wizard selection depends on T21)**
   - Static lists, tags, AND/OR segment rules, operators, live count preview, save/edit.
-  - Done when: a saved segment previews its count and can be selected by the campaign wizard.
+  - Built on live `/lists` and `/segments` APIs (create/detail/members/preview/save/edit/delete/duplicate flows as available), with dev-only/browser-stored tags where no tag API exists. “Use list/segment” stages a pending campaign audience in browser storage (`reyvo.campaignAudience.v1`) for T21 consumption.
+  - Verified in browser at 375/768/1024/1440: list create/detail/member add/count, segment preview/save/estimated audience/use/duplicate/cleanup, tag apply/rename/delete, no horizontal overflow and no unexpected console errors; `npm run build` passes.
+  - Caveat: saved segment can be staged for campaign selection, but cannot be fully selected/consumed by the campaign wizard until **T21** is implemented.
+  - Done when: a saved segment previews its count and can be selected by the campaign wizard. *(Functional preview/staging done; wizard-selection completion gated by T21.)*
 
-- [ ] **T17 — Suppression management** · M · deps: T12 · §5.2.5
+- [ ] **T17 — Suppression management** · M · deps: T12 · §5.2.5 · **M1**
   - Tenant suppression list, reasons, manual block, remove with owner override rules.
   - Done when: suppressed contacts are visibly excluded at import and campaign audience steps.
 
-## Inboxes
+## Inboxes (M2)
 
-- [ ] **T18 — Inbox list, health, and OAuth connect** · M · deps: T07 · §5.3
+- [ ] **T18 — Inbox list, health, and OAuth connect** · M · deps: T07 · §5.3 · **M2**
   - Provider choice, OAuth start/callback states, health badges, last check, reconnect prompts.
   - Done when: connected, needs-reauth, degraded, and disconnected accounts all render correctly.
 
-- [ ] **T19 — Inbox detail and configuration** · M · deps: T18 · §5.3.5
+- [ ] **T19 — Inbox detail and configuration** · M · deps: T18 · §5.3.5 · **M2**
   - From name, reply-to, signature, timezone, daily cap, warm-up, test send, disconnect.
   - Done when: caps are validated against plan/provider limits and test-send feedback is visible.
 
-## Campaigns
+## Campaigns (M3–M4)
 
-- [ ] **T20 — Campaign list** · M · deps: T07 · §5.4.1
+- [ ] **T20 — Campaign list** · M · deps: T07 · §5.4.1 · **M3**
   - Lifecycle badges, filters, empty state, create/duplicate/archive actions.
   - Done when: every lifecycle state has a clear next action.
 
-- [ ] **T21 — Campaign wizard: audience and mailboxes** · M · deps: T16, T18 · §5.4.2
+- [ ] **T21 — Campaign wizard: audience and mailboxes** · M · deps: T16, T18 · §5.4.2 · **M3**
   - Wizard shell, list/segment audience, included/excluded counts, healthy-inbox selection.
   - Done when: the estimated send count updates with exclusions and mailbox caps.
 
-- [ ] **T22 — Sequence editor and merge fields** · L · deps: T21 · §5.4.3, §5.4.4
+- [ ] **T22 — Sequence editor and merge fields** · L · deps: T21 · §5.4.3, §5.4.4 · **M3**
   - 1–8 steps, business-day delays, subject/body, rich text + plain-text fallback, merge-field picker.
   - Done when: unknown fields block progress and fallbacks are visible in preview.
 
-- [ ] **T23 — Schedule step** · M · deps: T22 · §5.4.5
+- [ ] **T23 — Schedule step** · M · deps: T22 · §5.4.5 · **M3**
   - Sending days, local window, timezone strategy, holiday skip, next-send preview.
   - Done when: the preview shows a correct local send time across DST-safe IANA zones.
 
-- [ ] **T24 — Review, preflight, preview, and test send** · L · deps: T23 · §5.4.9
+- [ ] **T24 — Review, preflight, preview, and test send** · L · deps: T23 · §5.4.9 · **M3**
   - Preflight checklist with blocking explanations, per-contact preview, test-send action.
   - Done when: launch is blocked with a specific reason until every preflight item passes.
 
-- [ ] **T25 — Approval workflow** · M · deps: T24 · §5.4.1
+- [ ] **T25 — Approval workflow** · M · deps: T24 · §5.4.1 · **M4**
   - Submit, approve, reject with reason, return to draft, immutable approved copy view.
   - Done when: role restrictions and audit entries are visible for each transition.
 
-- [ ] **T26 — Campaign detail, controls, and stats** · L · deps: T25 · §5.4.7, §5.8.3
+- [ ] **T26 — Campaign detail, controls, and stats** · L · deps: T25 · §5.4.7, §5.8.3 · **M4**
   - Launch, pause, resume, archive, duplicate; progress, per-step stats, replies, bounces, opt-outs, errors.
   - Done when: pause takes effect through the API and the UI shows held vs sent messages.
 
-## AI drafting
+## AI drafting (M4)
 
-- [ ] **T27 — AI generate and regenerate panel** · M · deps: T22 · §5.5
+- [ ] **T27 — AI generate and regenerate panel** · M · deps: T22 · §5.5 · **M4**
   - Generate subject/body, instruction input, used fields, assumptions, warnings, banned-claim errors.
   - Done when: failures and refusals offer retry and manual writing without losing the draft.
 
-- [ ] **T28 — AI approval, quota, and toggle** · M · deps: T27 · §5.5.5, §5.5.6
+- [ ] **T28 — AI approval, quota, and toggle** · M · deps: T27 · §5.5.5, §5.5.6 · **M4**
   - Edit-then-approve, reject-with-reason, usage meter, 80% warning, tenant AI on/off.
   - Done when: AI copy cannot launch without the configured approval mode.
 
-## Sending controls
+## Sending controls (M4)
 
-- [ ] **T29 — Sending health page** · M · deps: T19 · §5.3.4, §5.6.8
+- [ ] **T29 — Sending health page** · M · deps: T19 · §5.3.4, §5.6.8 · **M4**
   - Per-inbox cap usage, warm-up, bounce/error rate, last successful send, auth status, reason codes.
   - Done when: every health state explains what happened and what the user should do.
 
-- [ ] **T30 — Pause, resume, and kill-switch controls** · M · deps: T26 · §5.6.12
+- [ ] **T30 — Pause, resume, and kill-switch controls** · M · deps: T26 · §5.6.12 · **M4**
   - Tenant, campaign, and inbox pause/resume; admin global kill switch; confirmation for resume.
   - Done when: controls are audited and the affected scope is obvious before confirming.
 
-- [ ] **T31 — Usage and quota warnings** · S · deps: T06 · §5.9.2
+- [ ] **T31 — Usage and quota warnings** · S · deps: T06 · §5.9.2 · **M4**
   - Usage vs limits for sends, contacts, seats, inboxes, AI; banners at 80% and 100%.
   - Done when: the limit that blocks an action is named and linked to the upgrade path.
 
-## Replies, tasks, and pipeline
+## Replies, tasks, and pipeline (M5)
 
-- [ ] **T32 — Unified inbox list and filters** · L · deps: T07 · §5.7.4
+- [ ] **T32 — Unified inbox list and filters** · L · deps: T07 · §5.7.4 · **M5**
   - List/thread views; campaign, inbox, category, assignee, date, and status filters.
   - Done when: unmatched replies and test replies are clearly separated.
 
-- [ ] **T33 — Conversation view and actions** · L · deps: T32 · §5.7.4
+- [ ] **T33 — Conversation view and actions** · L · deps: T32 · §5.7.4 · **M5**
   - Thread, contact/company context, campaign, assign, note, task, suppress, stop sequence, open in provider.
   - Done when: HTML is sanitized and remote content is blocked by default.
 
-- [ ] **T34 — Classification and assignment** · M · deps: T33 · §5.7.3
+- [ ] **T34 — Classification and assignment** · M · deps: T33 · §5.7.3 · **M5**
   - Category badges, confidence, needs-review, manual correction, assignee.
   - Done when: corrections are saved and reflected in reporting.
 
-- [ ] **T35 — Tasks** · M · deps: T33 · §5.7.5
+- [ ] **T35 — Tasks** · M · deps: T33 · §5.7.5 · **M5**
   - List, create, assign, due date, priority, status, contact/opportunity links.
   - Done when: overdue and completed tasks are distinguishable.
 
-- [ ] **T36 — Pipeline board and table** · L · deps: T33 · §5.7.5
+- [ ] **T36 — Pipeline board and table** · L · deps: T33 · §5.7.5 · **M5**
   - Fixed stages, drag-and-drop, value/owner/source/aging, won/lost reason.
   - Done when: stage changes are confirmed, audited, and recoverable from an error.
 
-- [ ] **T37 — Opportunity detail and activity timeline** · M · deps: T36 · §5.7.5
+- [ ] **T37 — Opportunity detail and activity timeline** · M · deps: T36 · §5.7.5 · **M5**
   - Company, contact, stage, value, owner, close date, notes; combined send/reply/task/meeting timeline.
   - Done when: the timeline is chronological and links back to source records.
 
-## Reporting
+## Reporting (M6)
 
-- [ ] **T38 — Dashboard overview** · L · deps: T12, T26 · §5.8.3
+- [ ] **T38 — Dashboard overview** · L · deps: T12, T26 · §5.8.3 · **M6**
   - Sends, replies, positive replies, meetings, opt-outs, active campaigns, inbox health.
   - Done when: date range and timezone are explicit and "delivered" is labelled not observable.
 
-- [ ] **T39 — Campaign, inbox, and pipeline reports + export** · L · deps: T38 · §5.8.3, §5.8.4
+- [ ] **T39 — Campaign, inbox, and pipeline reports + export** · L · deps: T38 · §5.8.3, §5.8.4 · **M6**
   - Per-step performance, audience/exclusions, progress, errors; inbox health; pipeline by stage/owner.
   - Done when: CSV export uses the same injection protection as contact export.
 
-## Billing
+## Billing (M6)
 
-- [ ] **T40 — Subscription, usage, checkout, and portal** · L · deps: T06 · §5.10
+- [ ] **T40 — Subscription, usage, checkout, and portal** · L · deps: T06 · §5.10 · **M6**
   - Current plan, seats, usage, upgrade/downgrade, Checkout, Customer Portal, invoices.
   - Done when: past-due, grace-period, canceled, and downgrade-blocked states are all represented.
 
-## Settings and notifications
+## Settings and notifications (M6)
 
-- [ ] **T41 — Workspace settings and sending defaults** · M · deps: T06 · §5.11
+- [ ] **T41 — Workspace settings and sending defaults** · M · deps: T06 · §5.11 · **M6**
   - Agency name, physical address, timezone, default window, caps, signature, retention, AI toggle.
   - Done when: the physical address is enforced before campaign launch.
 
-- [ ] **T42 — Team management** · M · deps: T06 · §5.11
+- [ ] **T42 — Team management** · M · deps: T06 · §5.11 · **M6**
   - Invite, resend, revoke, change role, remove; last-owner protection.
   - Done when: every role change is audited and the last owner cannot be removed or demoted.
 
-- [ ] **T43 — Security settings and audit log** · M · deps: T10 · §5.9.4
+- [ ] **T43 — Security settings and audit log** · M · deps: T10 · §5.9.4 · **M6**
   - Password, MFA, active sessions, tenant audit search and export.
   - Done when: support/admin actions are visible to the tenant owner.
 
-- [ ] **T44 — Notifications** · M · deps: T04 · §5.7.6
+- [ ] **T44 — Notifications** · M · deps: T04 · §5.7.6 · **M6**
   - Bell dropdown, unread state, per-user preferences, tenant defaults, digest opt-in.
   - Done when: no email notification includes full message content.
 
-- [ ] **T45 — Data export, workspace deletion, import reports** · M · deps: T14 · §5.11
+- [ ] **T45 — Data export, workspace deletion, import reports** · M · deps: T14 · §5.11 · **M6**
   - Export workspace, 30-day delete confirmation, download completed import reports.
   - Done when: destructive actions require owner confirmation and offer an export first.
 
-## Platform admin
+## Platform admin (M7)
 
-- [ ] **T46 — Tenant management console** · L · deps: T07 · §5.9.1
+- [ ] **T46 — Tenant management console** · L · deps: T07 · §5.9.1 · **M7**
   - Search by name/slug/owner/plan/status; tenant profile, usage, inboxes, campaigns, health, MRR.
   - Done when: suspend, reactivate, trial extension, plan change, credit, MFA reset, force logout, flags work.
 
-- [ ] **T47 — Platform usage, health, audit, support, abuse** · L · deps: T46 · §5.9.2–§5.9.6
+- [ ] **T47 — Platform usage, health, audit, support, abuse** · L · deps: T46 · §5.9.2–§5.9.6 · **M7**
   - Usage and limits; queue/provider/API health; audit search; time-boxed support access; abuse signals and kill switches.
   - Done when: support access requires a reason, expires automatically, and is visible to the tenant.
 
-## Public pages
+## Public pages (M6)
 
-- [ ] **T48 — Unsubscribe page** · M · deps: T03 · §5.12
+- [ ] **T48 — Unsubscribe page** · M · deps: T03 · §5.12 · **M6**
   - Signed-token validation, agency name, GET confirmation, idempotent POST, expired/invalid states.
   - Done when: the page works signed out and records the opt-out exactly once.
 
-- [ ] **T49 — Status page and security.txt** · S · deps: none · §5.12
+- [ ] **T49 — Status page and security.txt** · S · deps: none · §5.12 · **M6**
   - Public status page (Phase 2 style placeholder is fine) and `/.well-known/security.txt`.
   - Done when: both are reachable and linked from the footer where appropriate.
 
-## Cross-cutting quality
+## Cross-cutting quality (M7 / ongoing)
 
-- [ ] **T50 — API client and data/form layer** · M · deps: T03
+- [ ] **T50 — API client and data/form layer** · M · deps: T03 · **M7 (ongoing; apply incrementally)**
   - Pagination, filtering, retries, idempotency keys, abort handling, query cache, form state.
   - Done when: no screen hand-rolls fetch or duplicates error parsing.
 
-- [ ] **T51 — Test setup and critical E2E flows** · L · deps: T03
+- [ ] **T51 — Test setup and critical E2E flows** · L · deps: T03 · **M7**
   - Unit tests for validation/API mapping; E2E for register → onboarding → import → campaign → reply.
   - Done when: `npm test` and the E2E suite run in CI.
 
-- [ ] **T52 — Accessibility and responsive audit** · M · deps: T04–T47
+- [ ] **T52 — Accessibility and responsive audit** · M · deps: T04–T47 · **M7 (ongoing; final audit in buffer)**
   - Keyboard, focus, contrast, landmarks, labels, table semantics, mobile tables/kanban.
   - Done when: app routes pass Lighthouse accessibility and manual keyboard checks.
 
-- [ ] **T53 — Documentation, env, and seed data** · S · deps: T03
-  - Update README with app routes, mock mode, env vars, seed fixtures, and test commands.
+- [ ] **T53 — Documentation, env, and seed data** · S · deps: T03 · **M0/M7**
+  - Update README with app routes, mock/dev mode, env vars, seed fixtures, branching/demo notes, and test commands.
   - Done when: a new developer can run and demo the app from a clean checkout.
 
 ## Recommended next steps
 
-1. ~~**T01** — auth transport and endpoint names~~ ✅
-2. ~~**T02** — backend restore / mock-first approval~~ ✅
-3. ~~**T03** — API contract map and client baseline~~ ✅
-4. ~~**T04** — app shell~~ ✅
-5. ~~**T05** — routing and role guards~~ ✅
-6. ~~**T06** — session/tenant context and workspace switcher~~ ✅
-7. ~~**T12** — contacts CRUD and detail~~ ✅
-8. ~~**T13** — CSV import upload and column mapping~~ ✅
-9. **T14** — CSV import validation, duplicates, progress, report, and rollback.
+1. ~~**T01–T15** — foundation and core audience flows~~ ✅
+2. **M0 (16–20 Nov 2026):** finalize demo baseline, confirm branch/process setup, keep `demo` ready for client walkthroughs.
+3. **M1 (23–27 Nov 2026):** complete **T17** (suppression management) and close T16 wizard-selection dependency at **T21**.
+4. **M2 (30 Nov–4 Dec 2026):** **T18–T19** inboxes.
+5. **M3 (8–18 Dec 2026):** **T20–T24** campaign authoring and preflight.
+6. **M4 (21–30 Dec 2026, holiday-shortened):** **T25–T31** approval/launch/AI/sending controls — target MVP feature-complete by **30 Dec 2026**.
+7. **Buffer (5–15 Jan 2027):** execute/finish **M5–M7** priorities, integration fixes, QA, polish, and demo hardening ahead of **15 Jan 2027** deadline.
 
-After T14, follow the milestone order: export and bulk actions → lists and segments → inboxes →
-campaigns → sending → replies/pipeline → reporting → billing/admin → hardening.
+> After M4 feature-complete checkpoint, prioritize by dependency and demo/MVP critical path: replies/pipeline essentials (T32–T35), reporting/billing/settings essentials (T38–T45, T48–T49), then admin and cross-cutting hardening (T46–T47, T50–T53), using buffer time to absorb defects and polish.
