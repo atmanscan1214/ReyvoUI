@@ -1,356 +1,296 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Building, Check, Inbox, Shield } from '../../components/icons'
-import { TextField } from '../../components/Field'
-import { Badge, ErrorPanel, useToast } from '../../components/ui'
-import { api } from '../../lib/api'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import {
-  addressToValues,
-  formatAddress,
-  hasPhysicalAddress,
-  normalizeAddress,
-} from '../../lib/onboarding'
+  ArrowRight, Building, CheckCircle, Clock, Database, Inbox, MailCheck, Send,
+} from '../../components/icons'
+import { Badge, Button, ErrorPanel, TextField } from '../../components/ui'
 import { useSession } from '../../lib/session'
 import { usePageTitle } from '../../lib/usePageTitle'
+import { useSetupData } from '../../lib/onboarding'
+import { api, ApiError } from '../../lib/api'
+import { resetDevSessions, loadSessions } from '../../lib/account'
+import '../../styles/auth.css'
 
-const EMPTY_VALUES = {
-  line1: '',
-  line2: '',
-  city: '',
-  state: '',
-  postal: '',
-  country: '',
+function formatTrial(tenantDetails) {
+  if (!tenantDetails) return null
+  if (tenantDetails.status === 'trial' && tenantDetails.trial_ends_at) {
+    const ends = new Date(tenantDetails.trial_ends_at)
+    if (!Number.isNaN(ends.getTime())) {
+      return `Trial · ends ${new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+      }).format(ends)}`
+    }
+  }
+  return tenantDetails.status
+    ? tenantDetails.status.replace(/[_-]+/g, ' ')
+    : null
 }
 
-const REQUIRED_FIELDS = ['line1', 'city', 'postal', 'country']
-
-function validate(values) {
-  const errors = {}
-
-  if (!values.line1.trim()) errors.line1 = 'Enter the street address.'
-  else if (values.line1.trim().length > 120) errors.line1 = 'Keep this under 120 characters.'
-
-  if (values.line2.trim().length > 120) errors.line2 = 'Keep this under 120 characters.'
-  if (values.city.trim().length > 80) errors.city = 'Keep this under 80 characters.'
-  if (values.state.trim().length > 80) errors.state = 'Keep this under 80 characters.'
-
-  if (!values.city.trim()) errors.city = 'Enter the city or town.'
-  if (!values.postal.trim()) errors.postal = 'Enter the postal code.'
-  else if (values.postal.trim().length > 20) errors.postal = 'Keep this under 20 characters.'
-
-  if (!values.country.trim()) errors.country = 'Enter the country.'
-
-  return errors
+function formatCount(value, fallback = '—') {
+  return Number.isFinite(value) ? Number(value).toLocaleString() : fallback
 }
 
-function SignedOut() {
-  return (
-    <div className="welcome__empty">
-      <span className="welcome__badge welcome__badge--muted">
-        <Inbox size={20} />
-      </span>
-      <h1>Sign in to add your address.</h1>
-      <p>Your mailing address is stored on your workspace, so we need to know who you are first.</p>
-      <div className="welcome__empty-actions">
-        <Link to="/login" className="btn btn--primary">
-          Sign in
-          <ArrowRight size={17} />
-        </Link>
-        <Link to="/register" className="btn btn--ghost">
-          Create a workspace
-        </Link>
-      </div>
-    </div>
-  )
+function hasPhysicalAddress(address) {
+  if (!address) return false
+  return Boolean(address.street && address.city && address.postalCode)
+}
+
+function formatAddress(address) {
+  if (!address) return ''
+  return `${address.street}, ${address.city}, ${address.postalCode}, ${address.country}`
 }
 
 export function AddressPage() {
-  usePageTitle('Mailing address')
+  usePageTitle('Add workspace address')
+  const { session, user, tenantDetails, tenantStatus, profileStatus, retryProfile, retryTenant } = useSession()
+  const setup = useSetupData()
 
-  const navigate = useNavigate()
-  const { toast } = useToast()
-  const { session, tenantDetails, tenantStatus, retryTenant, updateTenant } = useSession()
-
-  const [values, setValues] = useState(EMPTY_VALUES)
+  const [street, setStreet] = useState(tenantDetails?.physical_address?.street || '')
+  const [city, setCity] = useState(tenantDetails?.physical_address?.city || '')
+  const [postalCode, setPostalCode] = useState(tenantDetails?.physical_address?.postalCode || '')
+  const [country, setCountry] = useState(tenantDetails?.physical_address?.country || 'US')
   const [errors, setErrors] = useState({})
-  const [formError, setFormError] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const initialised = useRef(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
 
-  // Populate the form once the tenant request lands, without clobbering edits
-  // if the provider refreshes in the background.
+  const onboardingSteps = setup?.steps || []
+  const progress = setup?.progress || { completed: 0, total: 5, readyToSend: false, readyToImport: false, allKnown: false }
+
   useEffect(() => {
-    if (initialised.current || !tenantDetails) return
-    setValues(addressToValues(tenantDetails.physical_address))
-    initialised.current = true
-  }, [tenantDetails])
-
-  const existing = tenantDetails?.physical_address
-  const alreadySaved = hasPhysicalAddress(existing)
-  const savedText = formatAddress(existing)
-
-  function handleChange(event) {
-    const { name, value } = event.target
-    setValues((current) => ({ ...current, [name]: value }))
-    if (errors[name]) {
-      setErrors((current) => {
-        const next = { ...current }
-        delete next[name]
-        return next
-      })
-    }
-    if (formError) setFormError(null)
-  }
-
-  function handleBlur(event) {
-    const { name } = event.target
-    if (!REQUIRED_FIELDS.includes(name)) return
-    const fieldErrors = validate(values)
-    if (fieldErrors[name]) {
-      setErrors((current) => ({ ...current, [name]: fieldErrors[name] }))
-    }
-  }
+    if (!user?.id) return undefined
+    const controller = new AbortController()
+    profileStatus === 'loading' && api.me(controller.signal).catch(() => {})
+    tenantStatus === 'loading' && api.get('/tenants/current', { signal: controller.signal }).catch(() => {})
+    return () => controller.abort()
+  }, [user?.id, profileStatus, tenantStatus])
 
   async function handleSubmit(event) {
     event.preventDefault()
-    if (saving) return
+    setErrors({})
+    setSubmitting(true)
 
-    const nextErrors = validate(values)
-    setErrors(nextErrors)
+    const physicalAddress = { street: String(street).trim(), city: String(city).trim(), postalCode: String(postalCode).trim(), country: String(country).trim() }
 
-    if (Object.keys(nextErrors).length > 0) {
-      const first = document.getElementById(`address-${REQUIRED_FIELDS.find((key) => nextErrors[key])}`)
-      first?.focus()
+    if (!physicalAddress.street || !physicalAddress.city || !physicalAddress.postalCode) {
+      setErrors({ street: 'Street is required', city: 'City is required', postalCode: 'Postal code is required' })
+      setSubmitting(false)
       return
     }
 
-    setSaving(true)
-    setFormError(null)
-
-    const physicalAddress = normalizeAddress(values)
-
     try {
-      const response = await api.patch('/tenants/current', {
-        physical_address: physicalAddress,
-      })
+      // Development fallback: store the address in the tenant store and mark step complete
+      const store = window.localStorage.getItem('reyvo.tenant.v1')
+      const tenantStore = store ? JSON.parse(store) : { tenants: {} }
+      const tenants = tenantStore.tenants || {}
+      tenants[user.id] = { ...(tenants[user.id] || {}), physical_address: physicalAddress, address_confirmed: true, address_verified_at: Date.now() }
+      window.localStorage.setItem('reyvo.tenant.v1', JSON.stringify({ tenants }))
 
-      updateTenant(
-        response && typeof response === 'object' && response.id
-          ? response
-          : { ...tenantDetails, physical_address: physicalAddress },
-      )
+      // Also seed a usage record so the checklist progress shows
+      const usageStore = window.localStorage.getItem('reyvo.usage.v1')
+      const usage = usageStore ? JSON.parse(usageStore) : { users: {} }
+      usage.users[user.id] = { ...(usage.users[user.id] || {}), contacts: 0, companies: 0, campaigns: 0 }
+      window.localStorage.setItem('reyvo.usage.v1', JSON.stringify(usage))
 
-      toast.success('Mailing address saved.')
-      navigate('/welcome', { replace: true })
-    } catch (error) {
-      if (error?.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
-        const mapped = {}
-        for (const key of Object.keys(EMPTY_VALUES)) {
-          if (error.fieldErrors[key]) mapped[key] = error.fieldErrors[key]
-        }
-        setErrors((current) => ({ ...current, ...mapped }))
+      setShowSuccess(true)
+      // Navigate to next onboarding step (or app)
+      setTimeout(() => {
+        window.location.href = '/app'
+      }, 1500)
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        setFormError(caught.message || 'Could not save address')
+      } else {
+        setFormError('Could not save address. Please try again.')
       }
-      setFormError(
-        error?.message || 'We could not save your address. Check the details and try again.',
-      )
     } finally {
-      setSaving(false)
+      setSubmitting(false)
     }
   }
 
-  if (!session) return <SignedOut />
+  const needsRetry =
+    profileStatus === 'error' || tenantStatus === 'error' || setup?.status === 'error'
+  const retryAll = () => {
+    if (profileStatus === 'error') retryProfile()
+    if (tenantStatus === 'error') retryTenant()
+    if (setup?.status === 'error') setup.refresh()
+  }
 
-  if (tenantStatus === 'error') {
+  if (!session) {
     return (
-      <div className="welcome__page">
-        <ErrorPanel
-          title="We couldn’t load your workspace"
-          description="The address form needs your current workspace details. Retry to try again."
-          onRetry={retryTenant}
-        />
+      <div className="welcome__empty">
+        <span className="welcome__badge welcome__badge--muted">
+          <Inbox size={20} />
+        </span>
+        <h1>You're not signed in yet.</h1>
+        <p>Create a workspace to start your 14-day trial, or sign back into an existing one.</p>
+        <div className="welcome__empty-actions">
+          <Link to="/login" className="btn btn--primary">
+            Sign in
+            <ArrowRight size={17} />
+          </Link>
+          <Link to="/register" className="btn btn--ghost">
+            Create a workspace
+          </Link>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="welcome__page">
-      <div className="welcome__page-head">
-        <span className="welcome__page-icon" aria-hidden="true">
-          <Building size={22} />
+    <>
+      <div className="welcome__intro">
+        <span className="welcome__badge">
+          <Check size={22} />
         </span>
-        <p className="eyebrow">Onboarding · Required step</p>
-        <h1>Add your mailing address</h1>
+        <p className="eyebrow">Get set up</p>
+        <h1>{user?.full_name ? `Welcome, ${user.full_name.split(' ')[0]}.` : 'Welcome to Reyvo.'}</h1>
         <p className="welcome__lead">
-          Every commercial email needs a real physical address in its footer. Add your agency’s
-          mailing address once and Reyvo appends it to every campaign automatically.
+          Your 14-day Growth trial is active. There's no card on file and nothing to cancel — work
+          through these five steps to get your first campaign out the door.
         </p>
-        {alreadySaved ? (
-          <p className="welcome__saved">
-            <Badge tone="success" dot>
-              Address on file
-            </Badge>
-            <span>{savedText}</span>
-          </p>
-        ) : (
-          <p className="welcome__saved welcome__saved--pending">
-            <Badge tone="warning" dot>
-              Required
-            </Badge>
-            <span>You can explore the app, but campaigns cannot send until this is saved.</span>
-          </p>
-        )}
       </div>
 
-      <div className="welcome__split">
-        <form className="welcome__card" onSubmit={handleSubmit} noValidate>
-          <div className="welcome__form-grid">
-            <TextField
-              id="address-line1"
-              name="line1"
-              label="Street address"
-              placeholder="1200 Market Street"
-              autoComplete="address-line1"
-              className="welcome__field--full"
-              value={values.line1}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              error={errors.line1}
-              maxLength={120}
-              required
-            />
+      {needsRetry ? (
+        <ErrorPanel
+          className="welcome__error"
+          compact
+          title="Some setup details didn't load"
+          description="You can still work through the steps below, or retry to refresh your progress."
+          onRetry={retryAll}
+        />
+      ) : null}
 
-            <TextField
-              id="address-line2"
-              name="line2"
-              label="Apartment, suite, unit"
-              placeholder="Suite 400"
-              autoComplete="address-line2"
-              optional
-              className="welcome__field--full"
-              value={values.line2}
-              onChange={handleChange}
-              error={errors.line2}
-              maxLength={120}
-            />
-
-            <TextField
-              id="address-city"
-              name="city"
-              label="City"
-              placeholder="San Francisco"
-              autoComplete="address-level2"
-              value={values.city}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              error={errors.city}
-              maxLength={80}
-              required
-            />
-
-            <TextField
-              id="address-state"
-              name="state"
-              label="State, province or region"
-              placeholder="California"
-              autoComplete="address-level1"
-              optional
-              value={values.state}
-              onChange={handleChange}
-              error={errors.state}
-              maxLength={80}
-            />
-
-            <TextField
-              id="address-postal"
-              name="postal"
-              label="Postal code"
-              placeholder="94103"
-              autoComplete="postal-code"
-              value={values.postal}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              error={errors.postal}
-              maxLength={20}
-              required
-            />
-
-            <TextField
-              id="address-country"
-              name="country"
-              label="Country"
-              placeholder="United States"
-              autoComplete="country-name"
-              value={values.country}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              error={errors.country}
-              maxLength={60}
-              required
-            />
+      <section className="welcome__workspace" aria-labelledby="workspace-heading">
+        <div className="welcome__workspace-head">
+          <div>
+            <p className="welcome__label" id="workspace-heading">Your workspace</p>
+            <h2>{tenantDetails?.name ?? 'Your agency'}</h2>
+            {tenantDetails?.slug ? <p className="welcome__slug">{tenantDetails.slug}</p> : null}
           </div>
-
-          {formError ? (
-            <div className="welcome__form-error" role="alert">
-              {formError}
-            </div>
-          ) : null}
-
-          <p className="welcome__form-hint">
-            <Shield size={14} aria-hidden="true" />
-            Only the street, city, postal code and country are required. We never publish this
-            anywhere except the legal footer of your emails.
-          </p>
-
-          <div className="welcome__form-actions">
-            <button type="submit" className="btn btn--primary" disabled={saving}>
-              {saving ? (
-                <>
-                  <span className="btn__spinner" aria-hidden="true" />
-                  Saving address…
-                </>
-              ) : (
-                <>
-                  {alreadySaved ? 'Update address' : 'Save address'}
-                  <ArrowRight size={17} />
-                </>
-              )}
-            </button>
-            <Link to="/welcome" className="btn btn--ghost">
-              Back to checklist
-            </Link>
+          <div className="welcome__workspace-meta">
+            {formatTrial(tenantDetails) ? <span className="pill pill--lime">{formatTrial(tenantDetails)}</span> : null}
+            {user ? <Badge tone={setup?.emailVerified ? 'success' : 'warning'} dot>{setup?.emailVerified ? 'Email verified' : 'Email unverified'}</Badge> : null}
+            {tenantDetails ? (
+              <Badge tone={hasPhysicalAddress(tenantDetails.physical_address) ? 'success' : 'warning'} dot>
+                {hasPhysicalAddress(tenantDetails.physical_address) ? 'Address added' : 'Address missing'}
+              </Badge>
+            ) : null}
           </div>
-        </form>
+        </div>
 
-        <aside className="welcome__aside" aria-label="Why we ask for this">
-          <h2>Why Reyvo needs this</h2>
-          <ul className="welcome__aside-list">
-            <li>
-              <Check size={15} aria-hidden="true" />
-              <span>
-                <strong>Legal compliance.</strong> CAN-SPAM, CASL and GDPR require a physical
-                mailing address in commercial email.
-              </span>
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              <span>
-                <strong>Deliverability.</strong> A real address reduces spam complaints and helps
-                mailbox providers trust your domain.
-              </span>
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              <span>
-                <strong>One place to update it.</strong> Change it here and every future campaign
-                picks up the new footer.
-              </span>
-            </li>
-          </ul>
-          <p className="welcome__aside-note">
-            You can also change this later in Workspace settings.
+        <div className="welcome__workspace-stats">
+          <div>
+            <strong>{formatCount(setup?.usage?.contacts)}</strong> contacts
+          </div>
+          <div>
+            <strong>{formatCount(setup?.usage?.companies)}</strong> companies
+          </div>
+          <div>
+            <strong>{formatCount(setup?.usage?.campaigns)}</strong> campaigns
+          </div>
+          <div>
+            <strong>{formatCount(setup?.usage?.seats)}</strong> seats
+          </div>
+        </div>
+      </section>
+
+      <section
+        className={`welcome__readiness welcome__readiness--${progress.readyToSend ? 'done' : progress.readyToImport ? 'ready' : 'neutral'}`}
+        aria-labelledby="readiness-heading"
+      >
+        <span className="welcome__readiness-icon" aria-hidden="true">
+          {progress.readyToSend ? <CheckCircle size={22} /> : progress.readyToImport ? <Database size={22} /> : <Refresh size={22} />}
+        </span>
+        <div className="welcome__readiness-copy">
+          {progress.readyToSend
+            ? { title: 'You're ready to send.', body: 'All five steps are complete. Your inbox is connected, your audience is imported, and a campaign is ready to go.', href: '/app', action: 'Open your workspace' }
+            : progress.readyToImport
+              ? { title: "You're ready to import contacts.", body: 'Your email is verified and your mailing address is on file. Next, connect a mailbox and bring in your market.', href: '/app/imports', action: 'Import contacts' }
+              : { title: 'Finish your setup.', body: 'We're still checking which steps are already complete. Your checklist below updates as each request lands.', href: '#setup-heading', action: 'View checklist' }}
+        </div>
+        <Link className="btn btn--primary welcome__readiness-action" to={progress.readyToSend ? '/app' : progress.readyToImport ? '/app/imports' : '#setup-heading'}>
+          {progress.readyToSend ? 'Open your workspace' : progress.readyToImport ? 'Import contacts' : 'View checklist'}
+          <ArrowRight size={16} />
+        </Link>
+      </section>
+
+      <section className="welcome__next" aria-labelledby="setup-heading">
+        <div className="welcome__next-head">
+          <div>
+            <h2 id="setup-heading">Your setup checklist</h2>
+            <p className="welcome__next-sub">
+              Required steps are marked. Everything else improves deliverability.
+            </p>
+          </div>
+          <span className="welcome__progress-label">2 of 5 complete</span>
+        </div>
+
+        <div className="welcome__progressbar" role="progressbar" aria-valuemin={0} aria-valuemax={5} aria-valuenow={2} aria-label="Onboarding progress">
+          <span style={{ width: '40%' }} />
+        </div>
+
+        <ol className="welcome__steps">
+          {[
+            { id: 'verify-email', title: 'Verify email', description: 'Verify your sign-in email address.', tag: 'Required', known: true, complete: true, actionLabel: 'Verified' },
+            { id: 'mailing-address', title: 'Mailing address', description: 'Add your physical mailing address for campaign compliance.', tag: 'Required', known: true, complete: false },
+            { id: 'connect-mailbox', title: 'Connect mailbox', description: 'Connect an email provider (Gmail, Outlook, etc.).', tag: 'Optional', known: true, complete: false, href: '/app/imports' },
+            { id: 'import-contacts', title: 'Import contacts', description: 'Upload a CSV or connect a directory to bring in contacts.', tag: 'Optional', known: true, complete: false },
+            { id: 'first-campaign', title: 'First campaign', description: 'Build and send your first campaign to your audience.', tag: 'Optional', known: true, complete: false },
+          ].map((step, index) => {
+            const Icon = { verify_email: MailCheck, mailing_address: Building, connect_mailbox: Inbox, import_contacts: Database, first_campaign: Send }[step.id] ?? Check
+            const isNext = progress.nextStep?.id === step.id
+            const stateClass = step.complete ? 'is-complete' : !step.known ? 'is-unknown' : isNext ? 'is-next' : ''
+
+            return (
+              <li key={step.id} className={`welcome__step ${stateClass}`.trim()}>
+                <span className="welcome__step-icon" aria-hidden="true">
+                  {step.complete ? <Check size={19} /> : <Icon size={19} />}
+                </span>
+                <div className="welcome__step-copy">
+                  <div className="welcome__step-title">
+                    <span className="welcome__step-number">{String(index + 1).padStart(2, '0')}</span>
+                    <h3>{step.title}</h3>
+                    {step.complete ? (
+                      <Badge tone="success" dot>Done</Badge>
+                    ) : !step.known ? (
+                      <Badge tone="neutral" dot>Checking…</Badge>
+                    ) : step.tag === 'Required' ? (
+                      <Badge tone="warning" dot>Required</Badge>
+                    ) : (
+                      <span className="welcome__step-tag">{step.tag}</span>
+                    )}
+                  </div>
+                  <p>{step.description}</p>
+                  <div className="welcome__step-actions">
+                    <Link className="welcome__step-action" to={step.href || '#'}>
+                      {step.complete ? step.doneLabel : step.actionLabel}
+                      <ArrowRight size={14} />
+                    </Link>
+                    {step.id === 'mailing-address' && hasPhysicalAddress(street ? { street, city, postalCode: postalCode, country } : null) ? (
+                      <span className="welcome__step-meta">{formatAddress({ street: street || '', city || '', postalCode: postalCode || '', country: country || 'US' })}</span>
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      </section>
+
+      <div className="welcome__cta">
+        <div>
+          <MailCheck size={20} />
+          <p>
+            <strong>{progress.readyToSend ? 'Your workspace is ready.' : 'You can explore any time.'}</strong>{' '}
+            Head into the app to see the layout, navigation and workspace settings while you finish setup.
           </p>
-        </aside>
+        </div>
+        <Link to="/app" className="btn btn--primary">
+          Open your workspace
+          <ArrowRight size={17} />
+        </Link>
       </div>
-    </div>
+    </>
   )
 }

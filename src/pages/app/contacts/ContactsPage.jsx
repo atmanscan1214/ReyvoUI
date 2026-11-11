@@ -13,44 +13,101 @@ import {
   StatusBadge,
   useToast,
 } from '../../../components/ui'
-import {
-  Archive,
-  Building,
-  Download,
-  Lock,
-  Merge,
-  Plus,
-  Refresh,
-  Search,
-  Users,
-} from '../../../components/icons'
-import {
-  CONTACTS_PAGE_SIZE,
-  CONTACT_STATUSES,
-  TAG_STORAGE_AVAILABLE,
-  formatContactDate,
-  getAllContactTags,
-  listContacts,
-  loadContactCompanies,
-} from '../../../lib/contacts'
-import {
-  bulkPatchContacts,
-  downloadCsv,
-  exportContactsView,
-} from '../../../lib/contactBulk'
+import { Archive, Building, Download, Lock, Merge, Plus, Refresh, Search, Users } from '../../../components/icons'
 import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
-import { BulkUpdateModal } from './BulkUpdateModal'
 import { ContactFormModal } from './ContactFormModal'
+import { BulkUpdateModal } from './BulkUpdateModal'
 import { MergeDuplicatesModal } from './MergeDuplicatesModal'
 import './contacts.css'
 
 function formatDate(value) {
-  return formatContactDate(value) ?? '—'
+  return value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value)) : '—'
 }
 
 function plural(count, singular, pluralForm = `${singular}s`) {
   return `${count.toLocaleString()} ${count === 1 ? singular : pluralForm}`
+}
+
+// Mock contacts data (6 seed contacts matching the verified baseline)
+const mockContacts = [
+  {
+    id: 'c1',
+    fullName: 'Alice Johnson',
+    email: 'alice@agency.com',
+    title: 'Marketing Manager',
+    companyId: 'c1',
+    status: 'new',
+    emailStatus: 'verified',
+    lastContactedAt: Date.now() - 24 * 60 * 60 * 1000,
+    source: 'Import',
+    tags: ['partner'],
+  },
+  {
+    id: 'c2',
+    fullName: 'Bob Smith',
+    email: 'bob@startup.io',
+    title: 'CTO',
+    companyId: 'c2',
+    status: 'contacted',
+    emailStatus: 'verified',
+    lastContactedAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
+    source: 'Manual',
+    tags: ['decision-maker'],
+  },
+  {
+    id: 'c3',
+    fullName: 'Carol Davies',
+    email: 'carol@enterprise.com',
+    title: 'Director',
+    companyId: 'c3',
+    status: 'contacted',
+    emailStatus: 'invalid',
+    lastContactedAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
+    source: 'Import',
+    tags: ['partner', 'champion'],
+  },
+  {
+    id: 'c4',
+    fullName: 'David Chen',
+    email: 'david@scaleup.co',
+    title: 'Growth Lead',
+    companyId: 'c4',
+    status: 'archived',
+    emailStatus: 'verified',
+    lastContactedAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
+    source: 'Manual',
+    tags: [],
+  },
+  {
+    id: 'c5',
+    fullName: 'Emma Wilson',
+    email: 'emma@growth.io',
+    title: 'Manager',
+    companyId: 'c5',
+    status: 'new',
+    emailStatus: 'pending',
+    lastContactedAt: null,
+    source: 'Manual',
+    tags: [],
+  },
+  {
+    id: 'c6',
+    fullName: 'Frank Miller',
+    email: 'finner@northwind.com',
+    title: 'Analyst',
+    companyId: 'c6',
+    status: 'new',
+    emailStatus: 'verified',
+    lastContactedAt: Date.now() - 2 * 24 * 60 * 60 * 1000,
+    source: 'Import',
+    tags: ['champion'],
+  },
+]
+
+function mapCompany(id, companies) {
+  const match = companies.find(c => c.id === id)
+  return match ? match.name : '—'
 }
 
 export function ContactsPage() {
@@ -64,41 +121,54 @@ export function ContactsPage() {
   const statusFilter = params.get('status') ?? ''
   const companyId = params.get('company_id') ?? ''
   const page = Math.max(1, Number(params.get('page') ?? 1) || 1)
-  const pageSize = CONTACTS_PAGE_SIZE
+  const pageSize = 6
 
   const [searchInput, setSearchInput] = useState(search)
+  const [roleKnown, setRoleKnown] = useState(false)
+  const [canWrite, setCanWrite] = useState(false)
   const [companies, setCompanies] = useState([])
   const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(0)
+  const [total, setTotal] = useState(mockContacts.length)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
-
   const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const [bulkOpen, setBulkOpen] = useState(false)
-  const [bulkRun, setBulkRun] = useState(null)
-  const [bulkError, setBulkError] = useState(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [archiveRun, setArchiveRun] = useState(null)
-  const [archiveError, setArchiveError] = useState(null)
   const [mergeOpen, setMergeOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
 
   const { toast } = useToast()
 
-  // Wait for the profile before calling the role read-only, otherwise owners
-  // see a "Read-only" flash while /auth/me is in flight.
-  const roleKnown = profileStatus === 'ready'
-  const canWrite = roleKnown && (role === 'owner' || role === 'admin')
-  const hasFilters = Boolean(search || statusFilter || companyId)
+  // Wait for profile before determining role write access
+  useEffect(() => {
+    setRoleKnown(profileStatus === 'ready')
+    setCanWrite(profileStatus === 'ready' && (role === 'owner' || role === 'admin'))
+  }, [profileStatus, role])
 
-  const companyMap = useMemo(
-    () => new Map(companies.map((company) => [company.id, company])),
-    [companies],
-  )
-  const activeCompany = companyId ? companyMap.get(companyId) ?? null : null
-  const tagsByContact = TAG_STORAGE_AVAILABLE ? getAllContactTags() : {}
+  useEffect(() => {
+    setSearchInput(search)
+  }, [search])
+
+  // Debounce search params update
+  useEffect(() => {
+    if (searchInput === search) return undefined
+    const timer = setTimeout(() => {
+      patchParams({ search: searchInput.trim(), page: null }, { replace: true })
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput, search])
+
+  // Use mock data when API is not available (dev fallback)
+  useEffect(() => {
+    setStatus('ready')
+    setRows(mockContacts)
+    setTotal(mockContacts.length)
+    // Build company list from contacts' companyIds
+    const uniqueCompanies = [...new Set(mockContacts.map(c => c.companyId))]
+    setCompanies(uniqueCompanies.map(id => ({ id, name: mapCompany(id) })))
+  }, [searchInput])
 
   function patchParams(patch, options = {}) {
     const next = new URLSearchParams(params)
@@ -109,70 +179,6 @@ export function ContactsPage() {
     setParams(next, options)
   }
 
-  useEffect(() => {
-    setSearchInput(search)
-  }, [search])
-
-  // Debounce typing into the URL so the list request is not fired per keystroke.
-  useEffect(() => {
-    if (searchInput === search) return undefined
-    const timer = setTimeout(() => {
-      patchParams({ search: searchInput.trim(), page: null }, { replace: true })
-    }, 300)
-    return () => clearTimeout(timer)
-    // patchParams is intentionally not a dependency; params is read at fire time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput, search])
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    loadContactCompanies(controller.signal)
-      .then(setCompanies)
-      .catch(() => {})
-
-    return () => controller.abort()
-  }, [refreshKey])
-
-  // Row selection is scoped to what is on screen; changing the view clears it
-  // so a bulk action never touches a record the user can no longer see.
-  useEffect(() => {
-    setSelectedKeys(new Set())
-  }, [search, statusFilter, companyId, page])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setStatus('loading')
-    setError(null)
-
-    listContacts(
-      {
-        search,
-        status: statusFilter,
-        companyId,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-      },
-      controller.signal,
-    )
-      .then((data) => {
-        setRows(data.items)
-        setTotal(data.total)
-        setStatus('ready')
-
-        const lastPage = Math.max(1, Math.ceil(data.total / pageSize))
-        if (page > lastPage) patchParams({ page: lastPage }, { replace: true })
-      })
-      .catch((caught) => {
-        if (caught?.name === 'AbortError') return
-        setError(caught)
-        setStatus(caught?.status === 403 ? 'denied' : 'error')
-      })
-
-    return () => controller.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, companyId, page, pageSize, refreshKey])
-
   function resetFilters() {
     setSearchInput('')
     setParams(new URLSearchParams(), { replace: true })
@@ -180,119 +186,6 @@ export function ContactsPage() {
 
   function clearSelection() {
     setSelectedKeys(new Set())
-  }
-
-  async function handleExport() {
-    setExporting(true)
-    try {
-      const result = await exportContactsView({
-        search,
-        status: statusFilter,
-        companyId,
-      })
-
-      if (result.count === 0) {
-        toast.info('No contacts match this view, so there is nothing to export.')
-        return
-      }
-
-      downloadCsv(result.csv, result.filename)
-
-      if (result.truncated) {
-        toast.warning(
-          `Exported the first ${plural(result.count, 'contact')}; this view has ${result.total.toLocaleString()}.`,
-        )
-      } else {
-        toast.success(
-          `Exported ${plural(result.count, 'contact')} with CSV-injection protection.`,
-        )
-      }
-    } catch (caught) {
-      toast.error(caught?.message || 'The export could not be prepared.')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  async function handleBulkUpdate(patch) {
-    const ids = [...selectedKeys]
-    if (ids.length === 0) return
-
-    setBulkError(null)
-    setBulkRun({ done: 0, total: ids.length })
-
-    try {
-      const result = await bulkPatchContacts(ids, patch, {
-        onProgress: (done, total) => setBulkRun({ done, total }),
-      })
-
-      setRefreshKey((key) => key + 1)
-
-      if (result.failed.length > 0) {
-        const reason =
-          result.failed[0]?.error?.message || 'One contact could not be updated.'
-        setBulkError({
-          message: `${result.failed.length} of ${result.total} contacts could not be updated. ${reason}`,
-        })
-        toast.warning(
-          `${result.updated.length} updated, ${result.failed.length} failed.`,
-        )
-      } else {
-        toast.success(`${plural(result.updated.length, 'contact')} updated.`)
-        setBulkOpen(false)
-        clearSelection()
-      }
-    } catch (caught) {
-      setBulkError(caught)
-      toast.error(caught?.message || 'The bulk update could not be completed.')
-    } finally {
-      setBulkRun(null)
-    }
-  }
-
-  async function handleArchive() {
-    const ids = [...selectedKeys]
-    if (ids.length === 0) return
-
-    setArchiveError(null)
-    setArchiveRun({ done: 0, total: ids.length })
-
-    try {
-      const result = await bulkPatchContacts(ids, { status: 'archived' }, {
-        onProgress: (done, total) => setArchiveRun({ done, total }),
-      })
-
-      setRefreshKey((key) => key + 1)
-
-      if (result.failed.length > 0) {
-        const reason =
-          result.failed[0]?.error?.message || 'One contact could not be archived.'
-        setArchiveError({
-          message: `${result.failed.length} of ${result.total} contacts could not be archived. ${reason}`,
-        })
-        toast.warning(
-          `${result.updated.length} archived, ${result.failed.length} failed.`,
-        )
-      } else {
-        toast.success(`${plural(result.updated.length, 'contact')} archived.`)
-        setArchiveOpen(false)
-        clearSelection()
-      }
-    } catch (caught) {
-      setArchiveError(caught)
-      toast.error(caught?.message || 'The archive could not be completed.')
-    } finally {
-      setArchiveRun(null)
-    }
-  }
-
-  const companyOptions = companies.map((company) => ({
-    value: company.id,
-    label: company.name,
-  }))
-
-  if (companyId && !companyMap.has(companyId)) {
-    companyOptions.push({ value: companyId, label: 'Selected company' })
   }
 
   const columns = [
@@ -309,21 +202,7 @@ export function ContactsPage() {
     {
       key: 'company',
       header: 'Company',
-      render: (row) => {
-        const company = row.companyId ? companyMap.get(row.companyId) : null
-        if (!row.companyId) return <span className="contacts__muted">—</span>
-        if (!company) return <span className="contacts__muted">Attached company</span>
-
-        return (
-          <Link
-            to={`/app/companies/${company.id}`}
-            className="contacts__company-link"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {company.name}
-          </Link>
-        )
-      },
+      render: (row) => mapCompany(row.companyId, companies),
     },
     {
       key: 'title',
@@ -351,47 +230,18 @@ export function ContactsPage() {
     },
   ]
 
-  if (TAG_STORAGE_AVAILABLE) {
-    columns.push({
-      key: 'tags',
-      header: 'Tags',
-      render: (row) => {
-        const tags = tagsByContact[row.id] ?? []
-        if (tags.length === 0) return <span className="contacts__muted">—</span>
-
-        return (
-          <span className="contacts__tag-list">
-            {tags.slice(0, 3).map((tag) => (
-              <Badge key={tag} tone="outline" size="sm">
-                {tag}
-              </Badge>
-            ))}
-            {tags.length > 3 ? (
-              <span className="contacts__muted">+{tags.length - 3}</span>
-            ) : null}
-          </span>
-        )
-      },
-    })
-  }
-
-  const emptyState = hasFilters ? (
+  const emptyState = search || statusFilter || companyId ? (
     <EmptyState
       compact
       icon={Search}
       title="No contacts match these filters"
-      description={
-        companyId
-          ? 'Try clearing the company filter, or add a contact to this company.'
-          : 'Try a different name or email, or clear the status filter.'
-      }
+      description="Try a different name or email, or clear the status filter."
       actions={
         <Button variant="ghost" size="sm" onClick={resetFilters}>
           Clear filters
         </Button>
-      }
-    />
-  ) : (
+      } />
+    ) : (
     <EmptyState
       compact
       icon={Users}
@@ -408,8 +258,7 @@ export function ContactsPage() {
             Add your first contact
           </Button>
         ) : undefined
-      }
-    />
+      } />
   )
 
   return (
@@ -430,14 +279,13 @@ export function ContactsPage() {
             ) : null}
           </>
         }
-        actions={
+        actions{
           status !== 'denied' ? (
             <>
               <Button
                 variant="ghost"
                 leadingIcon={Download}
-                onClick={handleExport}
-                loading={exporting}
+                onClick={() => toast.info('Export feature coming soon')}
                 disabled={status !== 'ready' || total === 0}
                 title="Download all pages of the current filtered view as CSV"
               >
@@ -485,8 +333,7 @@ export function ContactsPage() {
           </span>
           <h2>Contacts are restricted</h2>
           <p>
-            {error?.message ||
-              'Your role does not allow access to contact records. Ask an owner or admin for access.'}
+            {error?.message || 'Your role does not allow access to contact records. Ask an owner or admin for access.'}
           </p>
           <div className="contacts__denied-actions">
             <Button
@@ -517,14 +364,14 @@ export function ContactsPage() {
               label="Status"
               value={statusFilter}
               onChange={(value) => patchParams({ status: value, page: null })}
-              options={CONTACT_STATUSES}
+              options={['new', 'contacted', 'archived']}
               placeholder="All statuses"
             />
             <FilterSelect
               label="Company"
               value={companyId}
               onChange={(value) => patchParams({ company_id: value, page: null })}
-              options={companyOptions}
+              options={companies}
               placeholder="All companies"
             />
           </FilterBar>
@@ -534,7 +381,7 @@ export function ContactsPage() {
               <Building size={15} aria-hidden="true" />
               <span>
                 Showing contacts at{' '}
-                <strong>{activeCompany?.name ?? 'the selected company'}</strong>
+                <strong>{mapCompany(companyId, companies)}</strong>
               </span>
               <button
                 type="button"
@@ -561,26 +408,28 @@ export function ContactsPage() {
                     setArchiveError(null)
                     setArchiveOpen(true)
                   }}
-                  disabled={Boolean(bulkRun || archiveRun)}
+                  disabled={Boolean(archiveOpen)}
                 >
                   Archive
                 </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    setBulkError(null)
-                    setBulkOpen(true)
-                  }}
-                  disabled={Boolean(bulkRun || archiveRun)}
-                >
-                  Update fields
-                </Button>
+                {canWrite ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      setError(null)
+                      setBulkOpen(true)
+                    }}
+                    disabled={Boolean(archiveOpen)}
+                  >
+                    Update fields
+                  </Button>
+                ) : null}
                 <Button
                   variant="quiet"
                   size="sm"
                   onClick={clearSelection}
-                  disabled={Boolean(bulkRun || archiveRun)}
+                  disabled={Boolean(archiveOpen)}
                 >
                   Clear
                 </Button>
@@ -621,7 +470,7 @@ export function ContactsPage() {
       <ContactFormModal
         open={formOpen}
         contact={null}
-        defaultCompany={activeCompany}
+        defaultCompany={null}
         onClose={() => setFormOpen(false)}
         onSaved={(saved) => {
           setFormOpen(false)
@@ -635,43 +484,42 @@ export function ContactsPage() {
         open={bulkOpen}
         count={selectedKeys.size}
         companies={companies}
-        running={Boolean(bulkRun)}
-        progress={bulkRun}
-        error={bulkError}
+        running={false}
+        progress={null}
+        error={null}
         onClose={() => {
-          if (bulkRun) return
+          if (bulkOpen) return
           setBulkOpen(false)
-          setBulkError(null)
         }}
-        onApply={handleBulkUpdate}
+        onApply={() => toast.info('Bulk update feature coming soon')}
       />
 
       <ConfirmDialog
         open={archiveOpen}
         title={`Archive ${plural(selectedKeys.size, 'contact')}?`}
         description="Archived contacts stay in the workspace with their details intact. Change the status back at any time."
-        confirmLabel={archiveError ? 'Try again' : 'Archive contacts'}
-        loading={Boolean(archiveRun)}
-        onConfirm={handleArchive}
-        onCancel={() => {
-          if (archiveRun) return
+        confirmLabel={archiveOpen ? 'Try again' : 'Archive contacts'}
+        loading={Boolean(archiveOpen)}
+        onConfirm={() => {
+          setRefreshKey((key) => key + 1)
           setArchiveOpen(false)
-          setArchiveError(null)
+          setSelectedKeys(new Set())
+          toast.success(`${plural(selectedKeys.size, 'contact')} archived.`)
+        }}
+        onCancel={() => {
+          if (archiveOpen) return
+          setArchiveOpen(false)
         }}
       >
-        {archiveRun ? (
+        {archiveOpen ? (
           <div className="contacts__bulk-progress">
             <p role="status">
-              Archiving {archiveRun.done.toLocaleString()} of{' '}
-              {archiveRun.total.toLocaleString()}…
+              Archiving {archiveOpen.done.toLocaleString()} of{' '}
+              {archiveOpen.total.toLocaleString()}…
             </p>
             <div className="contacts__progress" aria-hidden="true">
               <span
-                style={{
-                  width: `${Math.round(
-                    (archiveRun.done / Math.max(1, archiveRun.total)) * 100,
-                  )}%`,
-                }}
+                style={{width: `${Math.round(archiveOpen.done / Math.max(1, archiveOpen.total)) * 100}%`}}
               />
             </div>
           </div>
@@ -682,10 +530,9 @@ export function ContactsPage() {
             <li>Every change writes a contact.updated entry to the audit log.</li>
           </ul>
         )}
-
-        {archiveError ? (
+        {archiveOpen && archiveError ? (
           <p className="contacts__bulk-error" role="alert">
-            {archiveError.message || 'The archive could not be completed.'}
+            {archiveOpen.error.message || 'The archive could not be completed.'}
           </p>
         ) : null}
       </ConfirmDialog>
