@@ -240,9 +240,36 @@ marketing site and auth entry pages already exist and are not repeated here.
     passes.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
 
-- [ ] **T12 — Contacts** · L · deps: T07 · §5.2.1
+- [x] **T12 — Contacts** · L · deps: T07 · §5.2.1
   - List, filters, detail, create/edit/delete, statuses, tags, last contacted/replied.
   - Done when: a contact can be created manually and viewed with company context.
+  - Built on the live `/contacts` CRUD API with no fallbacks: URL-synced search (300 ms debounce),
+    status and company filters, and pagination on the list; overview, notes, custom fields, an
+    activity card (last contacted / last replied), and a company context card on the detail page;
+    one shared modal for create and edit with repeatable custom-field rows, server field-error
+    mapping, and a 403 banner that keeps typed values.
+  - Company context: contacts carry only `company_id` (no embedded summary, no batch lookup), so
+    list screens resolve names from a sampled `GET /companies?limit=100` directory and the detail
+    page fetches the exact company. The list's company filter uses the `company_id` URL parameter —
+    the same key as the company detail People card link — and creating from a company-filtered view
+    pre-selects that company.
+  - Statuses reflect the API's capability split: `status` (pipeline) is writable only on edit,
+    `email_status` (email health) only on create, so the form offers only the select the endpoint
+    accepts. Tags are deferred to T16, where the API first has a tags field.
+  - Duplicates are a hard stop, not a warning: contact emails are unique per workspace and the
+    server rejects a second record with a 409, so the form probes `/contacts?search=` before saving
+    and surfaces the existing contact with a “View contact” link instead of “save anyway”.
+  - Permission state: the same owner/admin write policy as companies — members get a read-only
+    notice and no create, edit, or delete affordances, plus graceful 403 handling.
+  - Verified in the browser: seven seeded contacts across three companies rendered with resolved
+    company names, statuses, and email-health badges; URL-synced search; status and `company_id`
+    filters; row click to detail with company context, activity, and custom fields; create
+    pre-selected the active company filter and offered email health; edit offered pipeline status
+    and persisted a status + title change; duplicate email surfaced the existing contact with a
+    view link; the company detail People card linked through to the filtered list; delete explained
+    list-membership removal and refreshed; filtered empty state with a clear action. Checked at
+    375 / 768 / 1024 / 1440 px (list, company-filtered, detail, create modal) with no horizontal
+    overflow and no console errors; `npm run build` passes.
 
 - [ ] **T13 — CSV import: upload and column mapping** · L · deps: T12 · §5.2.2
   - Template download, file validation, upload, detected columns, mapping to contact/company fields.

@@ -23,12 +23,18 @@ import { SecurityPage } from './pages/app/security/SecurityPage'
 import { AccountPage } from './pages/app/account/AccountPage'
 import { CompaniesPage } from './pages/app/companies/CompaniesPage'
 import { CompanyDetailPage } from './pages/app/companies/CompanyDetailPage'
+import { ContactsPage } from './pages/app/contacts/ContactsPage'
+import { ContactDetailPage } from './pages/app/contacts/ContactDetailPage'
 import { SessionProvider } from './lib/session'
 import './components/ui/ui.css'
 
 const AREA_ROUTES = Object.entries(APP_AREAS).filter(
   ([key]) =>
-    key !== 'dashboard' && key !== 'security' && key !== 'account' && key !== 'companies',
+    key !== 'dashboard' &&
+    key !== 'security' &&
+    key !== 'account' &&
+    key !== 'companies' &&
+    key !== 'contacts',
 )
 
 export default function App() {
@@ -86,6 +92,8 @@ export default function App() {
             <Route path="settings/account" element={<AccountPage />} />
             <Route path="companies" element={<CompaniesPage />} />
             <Route path="companies/:companyId" element={<CompanyDetailPage />} />
+            <Route path="contacts" element={<ContactsPage />} />
+            <Route path="contacts/:contactId" element={<ContactDetailPage />} />
             {AREA_ROUTES.map(([key, area]) => (
               <Route
                 key={key}

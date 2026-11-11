@@ -85,7 +85,9 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/settings/account` | Account | Profile, email change, password change, and active sessions |
 | `/app/companies` | Companies | Live company list with search, industry filter, pagination, and create |
 | `/app/companies/:companyId` | Company detail | Overview, notes, custom fields, attached people, edit, and delete |
-| `/app/*`    | App areas           | Replies, campaigns, pipeline, contacts, mailboxes, settings, admin, and the rest of `APP_AREAS` |
+| `/app/contacts` | Contacts | Live contact list with search, status and company filters, pagination, and create |
+| `/app/contacts/:contactId` | Contact detail | Overview, notes, custom fields, company context, activity, edit, and delete |
+| `/app/*`    | App areas           | Replies, campaigns, pipeline, mailboxes, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
 | `/privacy`  | Privacy Policy      | Static legal copy                                            |
@@ -121,6 +123,7 @@ src/
     app/             AppLayout, AreaGuard, placeholder screens, navigation model, app.css
       security/      SecurityPage.jsx + security.css
       companies/     CompaniesPage, CompanyDetailPage, CompanyFormModal + companies.css
+      contacts/     ContactsPage, ContactDetailPage, ContactFormModal + contacts.css
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -279,6 +282,35 @@ explains that the server still holds the original address until the endpoint shi
   graceful 403 handling for when it is enforced server-side.
 
 `src/lib/companies.js` owns normalization, validation, payload mapping, and duplicate detection.
+
+### Contacts
+
+`/app/contacts` joins the leads API the same way companies did, with no fallbacks:
+
+- **List** — debounced search on name and email (300 ms), an exact status filter, a company filter,
+  and pagination. Search, status, company, and page live in the URL. The company filter uses the
+  `company_id` parameter, the same key the company detail People card links with.
+- **Company names** — contact records carry only `company_id`; the API has no embedded company
+  summary or batch lookup. List screens sample `GET /companies?limit=100` for a directory, and the
+  filtered company is fetched exactly when the sample misses it so the filter and table always show
+  a real name.
+- **Detail** — overview facts, notes, custom fields, an activity card (last contacted / last
+  replied), and a company context card that fetches the linked record through `getCompany` with its
+  own missing/error states.
+- **Create and edit** — one modal covers both. The status select follows the API's capability
+  split: `email_status` is offered only on create, `status` only on edit, instead of faking both
+  everywhere. Creating from a company-filtered view pre-selects that company.
+- **Duplicates are a hard stop** — contact emails are unique per workspace and the server rejects a
+  second record with a 409, so the form probes `/contacts?search=` before saving and surfaces the
+  existing contact with a “View contact” link. There is no “save anyway” path like companies,
+  because the server would reject it anyway.
+- **Delete** — confirmation explains that the contact is removed from every list it belongs to,
+  matching `DELETE /contacts/{id}`.
+- **Permissions** — the same owner/admin write policy as companies: members get a read-only notice
+  and no create, edit, or delete affordances, plus graceful 403 handling.
+
+`src/lib/contacts.js` owns normalization, validation, payload mapping, the duplicate probe, and the
+sampled company directory.
 
 ### Shared UI kit
 
