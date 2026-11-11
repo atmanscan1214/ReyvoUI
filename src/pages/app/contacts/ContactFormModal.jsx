@@ -1,123 +1,34 @@
 import { useEffect, useId, useState } from 'react'
-import { Modal, Button, Badge, StatusBadge, useToast } from '../../../components/ui'
-import { TextField, TextareaField, SelectField } from '../../../components/Field'
-import { AlertCircle, Plus, Close } from '../../../components/icons'
+import { useNavigate } from 'react-router-dom'
+import { Badge, Button, Modal, formatStatus, useToast } from '../../../components/ui'
+import { SelectField, TextField, TextareaField } from '../../../components/Field'
+import { AlertCircle, ArrowRight, Close, Mail, Plus } from '../../../components/icons'
+import { getCompany } from '../../../lib/companies'
 import {
   CONTACT_STATUSES,
-  CONTACT_TAG_LENGTH,
-  CONTACT_TAG_LIMIT,
   EMAIL_STATUSES,
-  TAG_STORAGE_AVAILABLE,
+  contactDisplayName,
   contactToForm,
   createContact,
-  normalizeTag,
-  saveContactTags,
+  findContactDuplicates,
+  listCompanyDirectory,
   updateContact,
   validateContact,
 } from '../../../lib/contacts'
-import { CompanyPicker } from './CompanyPicker'
 
 const API_FIELD_MAP = {
   email: 'email',
   first_name: 'firstName',
   last_name: 'lastName',
   title: 'title',
-  company_id: 'companyId',
   phone: 'phone',
   linkedin_url: 'linkedinUrl',
   source: 'source',
-  email_status: 'emailStatus',
-  status: 'status',
   notes: 'notes',
   custom_fields: 'customFields',
-}
-
-function TagsInput({ tags, onChange, error }) {
-  const [draft, setDraft] = useState('')
-
-  function commit(value) {
-    const tag = normalizeTag(value)
-    setDraft('')
-    if (!tag) return
-    if (tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) return
-    if (CONTACT_TAG_LIMIT <= tags.length) return
-    onChange([...tags, tag])
-  }
-
-  function handleKeyDown(event) {
-    if (event.key === 'Enter' || event.key === ',') {
-      event.preventDefault()
-      commit(draft)
-      return
-    }
-    if (event.key === 'Backspace' && !draft && tags.length > 0) {
-      event.preventDefault()
-      onChange(tags.slice(0, -1))
-    }
-  }
-
-  return (
-    <div className="contact-tags">
-      {tags.length > 0 ? (
-        <ul className="contact-tags__list">
-          {tags.map((tag) => (
-            <li key={tag} className="contact-tags__chip">
-              <span>{tag}</span>
-              <button
-                type="button"
-                className="contact-tags__remove"
-                onClick={() => onChange(tags.filter((existing) => existing !== tag))}
-                aria-label={`Remove tag ${tag}`}
-                disabled={!TAG_STORAGE_AVAILABLE}
-              >
-                <Close size={12} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <div className="contact-tags__input-row">
-        <input
-          className="ui-input contact-tags__input"
-          placeholder={
-            TAG_STORAGE_AVAILABLE
-              ? 'Add a tag and press Enter'
-              : 'Tags are not available on this API build'
-          }
-          value={draft}
-          onChange={(event) => setDraft(event.target.value.slice(0, CONTACT_TAG_LENGTH))}
-          onKeyDown={handleKeyDown}
-          onBlur={() => commit(draft)}
-          disabled={!TAG_STORAGE_AVAILABLE || tags.length >= CONTACT_TAG_LIMIT}
-          maxLength={CONTACT_TAG_LENGTH}
-          aria-label="Add a tag"
-          aria-describedby={error ? 'contact-tags-error' : 'contact-tags-hint'}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          leadingIcon={Plus}
-          onClick={() => commit(draft)}
-          disabled={!TAG_STORAGE_AVAILABLE || !draft.trim() || tags.length >= CONTACT_TAG_LIMIT}
-        >
-          Add
-        </Button>
-      </div>
-
-      {error ? (
-        <p className="field__error" id="contact-tags-error">
-          {error}
-        </p>
-      ) : (
-        <p className="field__hint" id="contact-tags-hint">
-          {TAG_STORAGE_AVAILABLE
-            ? `Development only: this API build has no tags endpoint, so tags are stored in this browser. Up to ${CONTACT_TAG_LIMIT}.`
-            : 'Tag storage needs a tags endpoint, which this API build does not expose.'}
-        </p>
-      )}
-    </div>
-  )
+  company_id: 'companyId',
+  status: 'status',
+  email_status: 'emailStatus',
 }
 
 function ContactForm({
@@ -127,8 +38,9 @@ function ContactForm({
   setValues,
   errors,
   banner,
-  selectedCompany,
-  onCompanyChange,
+  duplicates,
+  companyOptions,
+  onOpenDuplicate,
   onSubmit,
 }) {
   function update(field, value) {
@@ -138,11 +50,27 @@ function ContactForm({
   function updateCustomField(index, part, value) {
     setValues((current) => ({
       ...current,
-      customFields: current.customFields.map((row, rowIndex) =>
-        rowIndex === index ? { ...row, [part]: value } : row,
+      customFields: current.customFields.map((field, fieldIndex) =>
+        fieldIndex === index ? { ...field, [part]: value } : field,
       ),
     }))
   }
+
+  function addCustomField() {
+    setValues((current) => ({
+      ...current,
+      customFields: [...current.customFields, { key: '', value: '' }],
+    }))
+  }
+
+  function removeCustomField(index) {
+    setValues((current) => ({
+      ...current,
+      customFields: current.customFields.filter((_, fieldIndex) => fieldIndex !== index),
+    }))
+  }
+
+  const editing = Boolean(contact)
 
   return (
     <form id={formId} className="contact-form" onSubmit={onSubmit} noValidate>
@@ -153,76 +81,141 @@ function ContactForm({
         </p>
       ) : null}
 
-      <section className="contact-form__section" aria-labelledby={`${formId}-identity`}>
-        <h3 className="contact-form__section-title" id={`${formId}-identity`}>
-          Identity
+      {duplicates.length > 0 ? (
+        <div className="contact-form__duplicate" role="alert">
+          <p className="contact-form__duplicate-title">
+            <Mail size={16} aria-hidden="true" />
+            This email is already in your workspace
+          </p>
+          <p className="contact-form__duplicate-copy">
+            Contact emails are unique, so the server rejects a second record for the same address.
+            Change the email, or open the existing contact to edit it instead.
+          </p>
+          <ul className="contact-form__duplicate-list">
+            {duplicates.map((match) => (
+              <li key={match.id}>
+                <div className="contact-form__duplicate-main">
+                  <strong>{contactDisplayName(match)}</strong>
+                  <span>{match.email}</span>
+                </div>
+                <button
+                  type="button"
+                  className="contact-form__duplicate-open"
+                  onClick={() => onOpenDuplicate(match.id)}
+                >
+                  View contact
+                  <ArrowRight size={13} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <section className="contact-form__section" aria-labelledby={`${formId}-basics`}>
+        <h3 className="contact-form__section-title" id={`${formId}-basics`}>
+          Basics
         </h3>
         <div className="contact-form__grid">
-          <TextField
-            id={`${formId}-first`}
-            label="First name"
-            placeholder="Ana"
-            value={values.firstName}
-            onChange={(event) => update('firstName', event.target.value)}
-            error={errors.firstName}
-            maxLength={120}
-            autoComplete="off"
-            autoFocus={!contact}
-          />
-
-          <TextField
-            id={`${formId}-last`}
-            label="Last name"
-            placeholder="Reyes"
-            value={values.lastName}
-            onChange={(event) => update('lastName', event.target.value)}
-            error={errors.lastName}
-            maxLength={120}
-            autoComplete="off"
-          />
-
           <TextField
             id={`${formId}-email`}
             label="Email"
             type="email"
-            placeholder="ana.reyes@northwind.com"
+            placeholder="dana@northwind.com"
+            hint="The unique identifier for this contact across lists and campaigns."
             value={values.email}
             onChange={(event) => update('email', event.target.value)}
             error={errors.email}
-            maxLength={320}
+            maxLength={254}
             className="contact-form__span-2"
-            autoComplete="off"
+            autoFocus={!editing}
+          />
+
+          <TextField
+            id={`${formId}-first-name`}
+            label="First name"
+            optional
+            placeholder="Dana"
+            value={values.firstName}
+            onChange={(event) => update('firstName', event.target.value)}
+            error={errors.firstName}
+            maxLength={120}
+          />
+
+          <TextField
+            id={`${formId}-last-name`}
+            label="Last name"
+            optional
+            placeholder="Reed"
+            value={values.lastName}
+            onChange={(event) => update('lastName', event.target.value)}
+            error={errors.lastName}
+            maxLength={120}
           />
 
           <TextField
             id={`${formId}-title`}
             label="Job title"
-            placeholder="Talent Director"
+            optional
+            placeholder="Head of Talent"
             value={values.title}
             onChange={(event) => update('title', event.target.value)}
             error={errors.title}
             maxLength={255}
-            className="contact-form__span-2"
+          />
+
+          <TextField
+            id={`${formId}-phone`}
+            label="Phone"
+            optional
+            type="tel"
+            placeholder="+1 555 0100"
+            value={values.phone}
+            onChange={(event) => update('phone', event.target.value)}
+            error={errors.phone}
+            maxLength={64}
           />
         </div>
       </section>
 
       <section className="contact-form__section" aria-labelledby={`${formId}-company`}>
         <h3 className="contact-form__section-title" id={`${formId}-company`}>
-          Company
+          Company &amp; source
         </h3>
         <div className="contact-form__grid">
-          <CompanyPicker
+          <SelectField
+            id={`${formId}-company`}
+            label="Company"
+            hint="Keeps this contact linked in the company’s People card."
             value={values.companyId}
-            selectedCompany={selectedCompany}
-            onChange={onCompanyChange}
+            onChange={(event) => update('companyId', event.target.value)}
             error={errors.companyId}
+            className="contact-form__span-2"
+          >
+            <option value="">No company</option>
+            {companyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </SelectField>
+
+          <TextField
+            id={`${formId}-linkedin`}
+            label="LinkedIn"
+            optional
+            placeholder="https://linkedin.com/in/dana-reed"
+            value={values.linkedinUrl}
+            onChange={(event) => update('linkedinUrl', event.target.value)}
+            error={errors.linkedinUrl}
+            maxLength={500}
           />
 
           <TextField
             id={`${formId}-source`}
             label="Source"
-            placeholder="Referral, LinkedIn, import…"
+            optional
+            placeholder="Referral"
             value={values.source}
             onChange={(event) => update('source', event.target.value)}
             error={errors.source}
@@ -231,90 +224,54 @@ function ContactForm({
         </div>
       </section>
 
-      <section className="contact-form__section" aria-labelledby={`${formId}-reach`}>
-        <h3 className="contact-form__section-title" id={`${formId}-reach`}>
-          Contact details
-        </h3>
-        <div className="contact-form__grid">
-          <TextField
-            id={`${formId}-phone`}
-            label="Phone"
-            type="tel"
-            placeholder="+63 917 000 0000"
-            value={values.phone}
-            onChange={(event) => update('phone', event.target.value)}
-            error={errors.phone}
-            maxLength={64}
-          />
-
-          <TextField
-            id={`${formId}-linkedin`}
-            label="LinkedIn URL"
-            placeholder="https://linkedin.com/in/anareyes"
-            value={values.linkedinUrl}
-            onChange={(event) => update('linkedinUrl', event.target.value)}
-            error={errors.linkedinUrl}
-            maxLength={500}
-          />
+      <section className="contact-form__section" aria-labelledby={`${formId}-status`}>
+        <div className="contact-form__section-head">
+          <h3 className="contact-form__section-title" id={`${formId}-status`}>
+            Status
+          </h3>
+          {editing ? (
+            <Badge tone="outline" size="sm">
+              Pipeline
+            </Badge>
+          ) : (
+            <Badge tone="outline" size="sm">
+              Email health
+            </Badge>
+          )}
         </div>
-      </section>
-
-      <section className="contact-form__section" aria-labelledby={`${formId}-deliverability`}>
-        <h3 className="contact-form__section-title" id={`${formId}-deliverability`}>
-          Deliverability
-        </h3>
         <div className="contact-form__grid">
-          {contact ? (
-            <div className="contact-form__note">
-              <p className="contact-form__note-title contact-form__note-title--row">
-                Current email health
-                <StatusBadge status={contact.emailStatus} size="sm" dot={false} />
-              </p>
-              <p>
-                Email health is set when a contact is created. Updates arrive from verification
-                once that service is connected.
-              </p>
-            </div>
+          {editing ? (
+            <SelectField
+              id={`${formId}-status`}
+              label="Pipeline status"
+              hint="Where this contact sits in your outreach. New contacts start as “New”."
+              value={values.status}
+              onChange={(event) => update('status', event.target.value)}
+              error={errors.status}
+              className="contact-form__span-2"
+            >
+              {CONTACT_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {formatStatus(status)}
+                </option>
+              ))}
+            </SelectField>
           ) : (
             <SelectField
               id={`${formId}-email-status`}
               label="Email health"
+              hint="Set once deliverability is verified. It cannot be changed after the contact exists."
               value={values.emailStatus}
               onChange={(event) => update('emailStatus', event.target.value)}
               error={errors.emailStatus}
-              hint="Set manually until the verification service is connected."
+              className="contact-form__span-2"
             >
-              {EMAIL_STATUSES.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {EMAIL_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {formatStatus(status)}
                 </option>
               ))}
             </SelectField>
-          )}
-
-          {contact ? (
-            <SelectField
-              id={`${formId}-status`}
-              label="Contact status"
-              value={values.status}
-              onChange={(event) => update('status', event.target.value)}
-              error={errors.status}
-              hint="Status normally follows sends and replies; you can correct it here."
-            >
-              {CONTACT_STATUSES.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </SelectField>
-          ) : (
-            <div className="contact-form__note">
-              <p className="contact-form__note-title">New contacts start as “New”</p>
-              <p>
-                Sends and replies move the status automatically. You can change it from the
-                contact record after creating it.
-              </p>
-            </div>
           )}
         </div>
       </section>
@@ -327,26 +284,10 @@ function ContactForm({
           id={`${formId}-notes-text`}
           label="Context for your team"
           optional
-          placeholder="How you met, what they care about, the next step…"
+          placeholder="What this person cares about, who introduced you, the best time to reach out…"
           value={values.notes}
           onChange={(event) => update('notes', event.target.value)}
           rows={4}
-        />
-      </section>
-
-      <section className="contact-form__section" aria-labelledby={`${formId}-tags`}>
-        <div className="contact-form__section-head">
-          <h3 className="contact-form__section-title" id={`${formId}-tags`}>
-            Tags
-          </h3>
-          <Badge tone="outline" size="sm">
-            Optional
-          </Badge>
-        </div>
-        <TagsInput
-          tags={values.tags}
-          onChange={(tags) => update('tags', tags)}
-          error={errors.tags}
         />
       </section>
 
@@ -362,7 +303,7 @@ function ContactForm({
 
         {values.customFields.length === 0 ? (
           <p className="contact-form__muted">
-            Add your own labels, like “Preferred channel” or “Time zone”.
+            Add your own labels, like “Preferred name” or “Timezone”.
           </p>
         ) : (
           <div className="contact-form__custom-list">
@@ -387,14 +328,7 @@ function ContactForm({
                 <button
                   type="button"
                   className="contact-form__custom-remove"
-                  onClick={() =>
-                    setValues((current) => ({
-                      ...current,
-                      customFields: current.customFields.filter(
-                        (_, rowIndex) => rowIndex !== index,
-                      ),
-                    }))
-                  }
+                  onClick={() => removeCustomField(index)}
                   aria-label={`Remove custom field ${index + 1}`}
                 >
                   <Close size={15} />
@@ -410,17 +344,7 @@ function ContactForm({
           </p>
         ) : null}
 
-        <Button
-          variant="ghost"
-          size="sm"
-          leadingIcon={Plus}
-          onClick={() =>
-            setValues((current) => ({
-              ...current,
-              customFields: [...current.customFields, { key: '', value: '' }],
-            }))
-          }
-        >
+        <Button variant="ghost" size="sm" leadingIcon={Plus} onClick={addCustomField}>
           Add field
         </Button>
       </section>
@@ -431,44 +355,74 @@ function ContactForm({
 export function ContactFormModal({
   open,
   contact = null,
-  defaultCompany = null,
+  defaultCompanyId = '',
   onClose,
   onSaved,
 }) {
+  const navigate = useNavigate()
   const { toast } = useToast()
   const formId = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const [values, setValues] = useState(() => contactToForm(contact))
-  const [selectedCompany, setSelectedCompany] = useState(defaultCompany)
   const [errors, setErrors] = useState({})
   const [banner, setBanner] = useState(null)
+  const [duplicates, setDuplicates] = useState([])
   const [submitting, setSubmitting] = useState(false)
+  const [companyOptions, setCompanyOptions] = useState([])
 
   const contactId = contact?.id ?? null
 
   useEffect(() => {
     const next = contactToForm(contact)
-    // A contact created from a company-scoped list starts attached to that
-    // company, so the picker, the payload, and the user's expectation agree.
-    if (!contact && defaultCompany?.id) next.companyId = defaultCompany.id
-
+    // Creating from a company-filtered list pre-selects that company.
+    if (!contact && defaultCompanyId) next.companyId = defaultCompanyId
     setValues(next)
-    setSelectedCompany(defaultCompany)
     setErrors({})
     setBanner(null)
+    setDuplicates([])
     // Only reset when a different record is opened, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId, open])
+
+  // Company options for the select. The directory is a sample of the first
+  // 100 records, so the contact's own company is also fetched exactly —
+  // it stays selectable even when the sample does not include it.
+  useEffect(() => {
+    if (!open) return undefined
+    const controller = new AbortController()
+
+    listCompanyDirectory(controller.signal)
+      .then((directory) => {
+        if (controller.signal.aborted) return
+        setCompanyOptions(directory.options)
+        if (!contactId) return
+        const hasCurrent = directory.options.some((option) => option.value === contact.companyId)
+        if (contact.companyId && !hasCurrent) {
+          getCompany(contact.companyId, controller.signal)
+            .then((found) => {
+              if (controller.signal.aborted) return
+              setCompanyOptions((current) => [
+                ...current,
+                { value: found.id, label: found.name },
+              ])
+            })
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
+
+    return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, contactId])
 
   function handleClose() {
     if (submitting) return
     onClose?.()
   }
 
-  function handleCompanyChange(company) {
-    setSelectedCompany(company)
-    setValues((current) => ({ ...current, companyId: company?.id ?? '' }))
-    if (errors.companyId) setErrors((current) => ({ ...current, companyId: undefined }))
-    if (banner) setBanner(null)
+  function handleOpenDuplicate(duplicateId) {
+    if (submitting) return
+    onClose?.()
+    navigate(`/app/contacts/${duplicateId}`)
   }
 
   async function handleSubmit(event) {
@@ -485,11 +439,17 @@ export function ContactFormModal({
     setSubmitting(true)
 
     try {
+      // Email uniqueness is enforced by the server (409), so this is a hard
+      // stop: there is no "save anyway" path like the company form.
+      const found = await findContactDuplicates(values, { excludeId: contactId })
+      if (found.length > 0) {
+        setDuplicates(found)
+        return
+      }
+
       const saved = contact
         ? await updateContact(contact.id, values)
         : await createContact(values)
-
-      saveContactTags(saved.id, values.tags)
 
       toast.success(contact ? 'Contact updated.' : 'Contact created.')
       onSaved?.(saved, { created: !contact })
@@ -500,18 +460,13 @@ export function ContactFormModal({
         const field = API_FIELD_MAP[key]
         if (field) mapped[field] = message
       }
-
-      if (caught?.status === 409) {
-        mapped.email = 'A contact with this email already exists in this workspace.'
-      }
-
       if (Object.keys(mapped).length > 0) setErrors(mapped)
 
       setBanner(
         caught?.status === 403
           ? 'Your role does not allow changes to contact records.'
           : caught?.status === 409
-            ? 'A contact with this email already exists in this workspace. Open that record to update it.'
+            ? 'A contact with this email already exists in this workspace.'
             : caught?.message || 'We could not save this contact. Try again.',
       )
     } finally {
@@ -525,8 +480,8 @@ export function ContactFormModal({
       title={contact ? 'Edit contact' : 'New contact'}
       description={
         contact
-          ? 'Update the person, their company, or how your team should reach them.'
-          : 'Add a person manually. Email is required; everything else can be filled in later.'
+          ? 'Updates the record your team sees across companies, lists, and campaigns.'
+          : 'Add a person to reach out to. You can fill in the rest later.'
       }
       size="lg"
       onClose={handleClose}
@@ -548,12 +503,14 @@ export function ContactFormModal({
         setValues={(updater) => {
           setValues(updater)
           if (Object.keys(errors).length > 0) setErrors({})
+          if (duplicates.length > 0) setDuplicates([])
           if (banner) setBanner(null)
         }}
         errors={errors}
         banner={banner}
-        selectedCompany={selectedCompany}
-        onCompanyChange={handleCompanyChange}
+        duplicates={duplicates}
+        companyOptions={companyOptions}
+        onOpenDuplicate={handleOpenDuplicate}
         onSubmit={handleSubmit}
       />
     </Modal>
