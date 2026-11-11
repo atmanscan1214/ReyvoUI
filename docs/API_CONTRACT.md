@@ -298,8 +298,117 @@ as unavailable. When the real endpoints ship, only the adapter needs to change.
 | `POST /contacts/import` | Multipart CSV import; returns `ImportReport` |
 | `GET /contacts/export` | CSV download (`text/csv`) |
 
-`ContactRead` includes `full_name`, `email_normalized`, `email_status`, `status`, `custom_fields`,
-`last_contacted_at`, and `last_replied_at`.
+`ContactRead` fields: `company_id`, `first_name`, `last_name`, `full_name`, `title`, `email`,
+`email_normalized`, `email_status` (`valid`, `risky`, `invalid`, `unknown`), `phone`,
+`linkedin_url`, `source`, `status`, `notes`, `custom_fields`, `last_contacted_at`,
+`last_replied_at`, `created_at`, `updated_at`.
+
+- `GET /contacts` is ordered by `created_at desc`. `search` is a case-insensitive substring match on
+  the normalized email and full name; `status` and `company_id` are exact filters.
+- `ContactRead` carries `company_id` but **not** the company itself. The frontend fetches
+  `/companies/{id}` for detail context and samples `/companies?limit=100` for the company filter and
+  list-row names.
+- `ContactCreate` accepts `company_id`, or `company_name`/`company_domain` to find-or-create a
+  company within the tenant. It ignores `status`: new contacts start at `new` (`unsubscribed` when
+  the address is suppressed). Status is writable only through `PATCH`.
+- `ContactCreate` accepts `email_status`; `ContactUpdate` does not. The UI exposes email health on
+  create only and shows it read-only on edit.
+- A duplicate normalized email returns `409` with “A contact with this email already exists in this
+  workspace.” on create and “Another contact already uses this email address.” on update.
+- **Tags are not implemented by this API build.** The design lists tags, but no tags endpoint or
+  field exists. Development builds keep tags per browser under `reyvo.contactTags.v1` and label them
+  as browser-only; production builds report the feature as unavailable. They are never sent to the
+  server.
+- No RBAC is wired up on this router yet: a `member` can still write through the API. The UI treats
+  `owner`/`admin` as writable and handles `403` gracefully on reads and writes.
+
+#### CSV export, bulk actions, and merge
+
+The design's endpoint catalog also lists `POST /contacts/bulk`, `POST /contacts/merge`, and filtered
+exports. This API build exposes none of those variants: only `GET /contacts/export` exists, and it has
+no filter parameters, no formula-injection sanitization, and no audit write. T15 therefore composes
+the behaviour in `src/lib/contactBulk.js` around the live routes:
+
+- **Export** — `GET /contacts/export` returns every tenant contact in `created_at` order with
+  `email`, names, `full_name`, `title`, `company`, `company_domain`, `phone`, `linkedin_url`,
+  `source`, `status`, and `created_at`. It ignores `search`, `status`, and `company_id`, and writes
+  values as-is. The UI does not use this route for filtered export. It pages `GET /contacts` with the
+  active filters (100 per page, capped at 5,000), pages `/companies` for names and domains (capped at
+  1,000), and builds the CSV in the browser with a UTF-8 BOM. Cells beginning with `=`, `+`, `-`, or
+  `@` (plus tab and carriage return) are prefixed with a single quote. There is no export-audit
+  endpoint, so a download cannot be written to the tenant audit log in this build.
+- **Bulk archive/update** — there is no bulk route. Each selected row is sent as its own
+  `PATCH /contacts/{id}`. Archive sets `status: "archived"`; update accepts optional `status`,
+  `company_id` (including `null` to detach), and `source`. Requests run in sequence, failures are
+  counted without stopping the batch, and each success is audited as `contact.updated`.
+- **Merge** — there is no merge route, tombstone, undo window, or relation-transfer step. The browser
+  scans up to 1,000 contacts and groups them by normalized name plus `company_id` (emails are unique,
+  so duplicates only coexist under different addresses). The chosen survivor is `PATCH`ed with blank
+  fields filled from the duplicates and combined `custom_fields`; each duplicate is then `DELETE`d.
+  Development tags are combined in `reyvo.contactTags.v1` before deletion. The survivor update is
+  audited as `contact.updated` and each deletion as `contact.deleted`. Deletion is permanent, and
+  related campaigns, opportunities, tasks, and activities are not moved.
+- **Permissions** — owner/admin see selection, archive, update, and merge controls. Export is
+  available to any role that can view contacts, because this build has no owner setting to disable
+  member export.
+
+#### CSV import
+
+`POST /contacts/import` is one synchronous multipart request with a `file` part. It returns `201`
+with:
+
+```json
+{
+  "import_id": "uuid",
+  "status": "completed",
+  "row_count": 4,
+  "imported_count": 2,
+  "duplicate_count": 1,
+  "suppressed_count": 0,
+  "error_count": 0,
+  "errors": [{ "row": 3, "email": "not-an-email", "reason": "invalid_email" }]
+}
+```
+
+- Headers are matched by case-insensitive **exact canonical names only**: `email`, `first_name`,
+  `last_name`, `full_name`, `title`, `company`, `company_domain`, `phone`, `linkedin_url`, `source`.
+  There is no mapping payload, preview request, presigned upload, progress job, update mode, rollback
+  endpoint, or server-side report download in this API build.
+- An `email` header is required; without one the request fails with `400` “The CSV file must include
+  an 'email' column.” Files must decode as UTF-8 (a BOM is accepted).
+- Rows with a missing or invalid email are skipped and returned in `errors` with
+  `reason: "invalid_email"`. `row` is the 1-based file row number, so the first data row is `2`.
+- A normalized email that already exists in the tenant, or repeats earlier in the same file, counts
+  as a duplicate and is skipped. A suppressed address counts as suppressed and is skipped. Neither
+  case is an error.
+- `company` and `company_domain` go through find-or-create, the same as `ContactCreate`. New contacts
+  start at `new`; a missing `source` defaults to `csv_import`.
+- The endpoint is synchronous and commits before responding. Import jobs and their report are
+  audited as `contacts.imported`.
+
+The frontend parses and validates the file locally, maps the user's headers, rewrites the remaining
+rows with canonical headers, and posts the file. Rows that fail browser validation are not sent and
+are merged into the displayed report with their original row numbers.
+
+**T14 client orchestration.** Because the API has no preview, update, job, or rollback endpoints,
+`src/lib/imports.js` composes those behaviours around the live routes:
+
+- Preview scans `GET /contacts` and `GET /suppressions` in 100-record pages, capped at 1,000 records
+  per list. Truncation is labelled; the API still skips anything outside the scan, and those rows
+  appear as summary duplicate/suppressed counts without row detail.
+- Skip mode posts only rows that are new by the browser index. Review mode posts clean new rows and
+  holds existing, suppressed, and role-based rows back. Suppressed addresses are never posted.
+- Update mode posts clean new rows, then calls `PATCH /contacts/{id}` for each matching contact with
+  `first_name`, `last_name`, `full_name`, `title`, `phone`, `linkedin_url`, and `source`. `email` is
+  the match key and is not changed, and `company` is not updated because `ContactUpdate` only accepts
+  `company_id`.
+- Progress is browser-side staging around the synchronous import and the update loop; there is no
+  server job to resume. The report merges API errors (`row` is still the canonical CSV row number)
+  with browser-caught validation and skip reasons.
+- Rollback is browser-local (`reyvo.importRollbacks.v1`, 24-hour window). It searches each submitted
+  email, deletes only contacts created after the import started, and keeps any contact whose
+  `last_contacted_at` or `last_replied_at` is at or after that time. It does not reverse updates and
+  does not delete companies created by the import.
 
 ### Lists
 

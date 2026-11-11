@@ -300,6 +300,57 @@ export const Upload = (props) => (
   </Svg>
 )
 
+export const Download = (props) => (
+  <Svg {...props}>
+    <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
+    <path d="M4 19h16" />
+  </Svg>
+)
+
+export const Archive = (props) => (
+  <Svg {...props}>
+    <rect x="3.5" y="4.5" width="17" height="4" rx="1.2" />
+    <path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5" />
+    <path d="M10 12.5h4" />
+  </Svg>
+)
+
+export const Merge = (props) => (
+  <Svg {...props}>
+    <path d="M4 5h3.5a4 4 0 0 1 3.3 1.8l2.4 3.4a4 4 0 0 0 3.3 1.8H21" />
+    <path d="M4 19h3.5a4 4 0 0 0 3.3-1.8l2.4-3.4A4 4 0 0 1 16.5 12H21" />
+    <path d="m18 9 3 3-3 3" />
+  </Svg>
+)
+
+export const Tag = (props) => (
+  <Svg {...props}>
+    <path d="M20.5 13.3 12.7 21a2 2 0 0 1-2.8 0l-6.9-6.9a2 2 0 0 1-.6-1.4V4.5a1 1 0 0 1 1-1h8.2a2 2 0 0 1 1.4.6l7.5 7.5a2 2 0 0 1 0 2.7Z" />
+    <circle cx="7.8" cy="7.8" r="1.4" />
+  </Svg>
+)
+
+export const Pencil = (props) => (
+  <Svg {...props}>
+    <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+    <path d="m13.5 6.5 4 4" />
+  </Svg>
+)
+
+export const Trash = (props) => (
+  <Svg {...props}>
+    <path d="M4 7h16M9 7V5h6v2M6.5 7l.8 12.2A1.8 1.8 0 0 0 9.1 21h5.8a1.8 1.8 0 0 0 1.8-1.8L17.5 7" />
+    <path d="M10 11v6M14 11v6" />
+  </Svg>
+)
+
+export const Copy = (props) => (
+  <Svg {...props}>
+    <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+    <path d="M15.5 8.5V6a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2.5" />
+  </Svg>
+)
+
 export const CheckCircle = (props) => (
   <Svg {...props}>
     <circle cx="12" cy="12" r="9" />

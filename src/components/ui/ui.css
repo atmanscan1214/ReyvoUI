@@ -572,6 +572,10 @@
 
 /* Tabs -------------------------------------------------------------------- */
 
+.ui-tabs {
+  min-width: 0;
+}
+
 .ui-tabs__list {
   display: flex;
   gap: 2px;
@@ -641,6 +645,7 @@
 
 .ui-tabs__panel {
   padding-top: 18px;
+  min-width: 0;
 }
 
 .ui-tabs__panel:focus-visible {

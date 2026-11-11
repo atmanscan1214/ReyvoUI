@@ -82,8 +82,13 @@ function notifySessionExpired() {
   sessionExpiredHandler?.()
 }
 
+function isFormData(body) {
+  return typeof FormData !== 'undefined' && body instanceof FormData
+}
+
 async function request(path, { method = 'GET', body, token, signal } = {}) {
   let response
+  const formData = isFormData(body)
 
   try {
     response = await fetch(`${API_BASE}${path}`, {
@@ -91,10 +96,12 @@ async function request(path, { method = 'GET', body, token, signal } = {}) {
       signal,
       headers: {
         Accept: 'application/json',
-        ...(body ? { 'Content-Type': 'application/json' } : null),
+        // The browser sets the multipart boundary itself; setting JSON here
+        // would make the upload unreadable to the API.
+        ...(body && !formData ? { 'Content-Type': 'application/json' } : null),
         ...(token ? { Authorization: `Bearer ${token}` } : null),
       },
-      ...(body ? { body: JSON.stringify(body) } : null),
+      ...(body ? { body: formData ? body : JSON.stringify(body) } : null),
     })
   } catch (error) {
     if (isAbort(error)) throw error
@@ -276,6 +283,8 @@ export const api = {
   // calling fetch directly, so auth refresh and error parsing stay in one place.
   get: (path, options = {}) => authedRequest(path, options),
   post: (path, body, options = {}) => authedRequest(path, { ...options, method: 'POST', body }),
+  postForm: (path, formData, options = {}) =>
+    authedRequest(path, { ...options, method: 'POST', body: formData }),
   patch: (path, body, options = {}) => authedRequest(path, { ...options, method: 'PATCH', body }),
   delete: (path, options = {}) => authedRequest(path, { ...options, method: 'DELETE' }),
 }

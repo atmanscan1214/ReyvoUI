@@ -85,7 +85,10 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/settings/account` | Account | Profile, email change, password change, and active sessions |
 | `/app/companies` | Companies | Live company list with search, industry filter, pagination, and create |
 | `/app/companies/:companyId` | Company detail | Overview, notes, custom fields, attached people, edit, and delete |
-| `/app/*`    | App areas           | Replies, campaigns, pipeline, contacts, mailboxes, settings, admin, and the rest of `APP_AREAS` |
+| `/app/contacts` | Contacts | Live list with filters, export, bulk archive/update, duplicate merge, tags column, and create |
+| `/app/contacts/:contactId` | Contact detail | Overview, notes, tags, custom fields, company context, email health, edit, and delete |
+| `/app/imports` | Imports | CSV template, upload, mapping, duplicate modes, preview counts, progress, explained report, and 24-hour rollback |
+| `/app/*`    | App areas           | Replies, campaigns, pipeline, lists, mailboxes, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
 | `/privacy`  | Privacy Policy      | Static legal copy                                            |
@@ -121,6 +124,8 @@ src/
     app/             AppLayout, AreaGuard, placeholder screens, navigation model, app.css
       security/      SecurityPage.jsx + security.css
       companies/     CompaniesPage, CompanyDetailPage, CompanyFormModal + companies.css
+      contacts/      ContactsPage, ContactDetailPage, ContactFormModal, CompanyPicker, BulkUpdateModal, MergeDuplicatesModal + contacts.css
+      imports/       ImportsPage + imports.css (CSV upload, mapping, duplicate modes, report, rollback)
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -148,8 +153,9 @@ scripts/
 - turns network failures and 502/504 responses into a human message instead of "Failed to fetch";
 - refreshes the access token before expiry and once on a `401`, shares one refresh across
   concurrent requests, and clears the session only when the refresh token itself is rejected;
-- exposes `api.get`, `api.post`, `api.patch`, and `api.delete` so product screens never call
-  `fetch` directly.
+- exposes `api.get`, `api.post`, `api.postForm`, `api.patch`, and `api.delete` so product screens never
+  call `fetch` directly. `postForm` sends `FormData` without forcing a JSON content type, so the
+  browser can set the multipart boundary for CSV upload.
 
 `onSessionExpired()` lets the app shell send the user to `/login` with a clear "session expired"
 notice when a refresh is rejected.
@@ -279,6 +285,91 @@ explains that the server still holds the original address until the endpoint shi
   graceful 403 handling for when it is enforced server-side.
 
 `src/lib/companies.js` owns normalization, validation, payload mapping, and duplicate detection.
+
+### Contacts
+
+`/app/contacts` is built on the live `/contacts` CRUD API:
+
+- **List** — debounced search on name and email (300 ms), a status filter, a company filter sampled
+  from `GET /companies?limit=100`, and pagination. Search, status, company, and page live in the URL.
+  The company column links back to the company record, and `/app/contacts?company_id=…` is the link
+  used by a company's People card.
+- **Detail** — overview facts including last contacted and last replied, notes, tags, custom fields,
+  and a company card with industry, location, employees, and website. The email-health card explains
+  what the status means. Missing, restricted, and failed loads each get their own state.
+- **Create and edit** — one modal covers both, with a searchable company picker backed by
+  `/companies?search=`, repeatable custom-field rows, server field errors mapped onto the form, and a
+  403 banner that keeps typed values. A duplicate email returns `409`; the form marks the email field
+  and explains that the existing record should be opened instead.
+- **Status** — `ContactCreate` deliberately ignores `status` and starts every contact at `new` (or
+  `unsubscribed` when the address is suppressed), so the create form explains that status follows
+  sends and replies. Status is editable only on the edit form, through `PATCH`.
+- **Email health** — accepted only on create, because `ContactUpdate` has no `email_status` field. The
+  edit form shows the current value read-only, and the detail card says so.
+- **Tags** — the design lists tags on a contact, but this API build has no tags endpoint. Development
+  builds store them per browser under `reyvo.contactTags.v1` and label the feature as browser-only;
+  production reports tags as unavailable rather than pretending they reached the server.
+- **Permissions** — owner and admin get write controls; members get a read-only notice and no create,
+  edit, or delete affordances. The API has no RBAC on `/contacts`, so this is a UI policy plus graceful
+  403 handling for reads and writes.
+- **Export** — **Export view** downloads the current filtered list (search, status, and company), not
+  just the visible page. The browser pages through `GET /contacts`, adds `status` and `created_at`,
+  writes a UTF-8 BOM, and prefixes any cell that begins with `=`, `+`, `-`, or `@` with a single quote
+  so spreadsheets never evaluate a contact as a formula. `GET /contacts/export` ignores filters and
+  does not sanitize, so the file is built client-side. This API build has no export-audit endpoint, so
+  downloads are not written to the audit log.
+- **Bulk archive and update** — owner/admin can select rows on the current page and either archive
+  them or set status, company, and source in one pass. Each selected record is sent as its own
+  `PATCH /contacts/{id}`, so one failure does not block the rest; the result reports how many
+  succeeded, and the selection stays so a failed batch can be retried. Every change is audited as
+  `contact.updated`.
+- **Merge duplicates** — the merge dialog scans up to 1,000 contacts and groups them by normalized
+  name plus company, because emails are unique in the API. Pick the record to keep, confirm, and the
+  survivor is `PATCH`ed while each duplicate is `DELETE`d; blank fields (including company and
+  LinkedIn URL) are filled from the duplicates and browser-side tags are combined. Deletion is
+  permanent in this build — there is no merge endpoint, 30-day undo, or related-record transfer — and
+  the survivor update plus each deletion appear in the audit log as `contact.updated` and
+  `contact.deleted`.
+
+`src/lib/contacts.js` owns normalization, validation, payload mapping, the dev-only tag store, and
+date formatting. `src/lib/contactBulk.js` owns filtered export, injection-safe CSV cells, sequential
+bulk patching, duplicate grouping, merge planning, and merge execution. `CompanyPicker` and the
+company filters share `/companies` sampling.
+
+### Imports
+
+`/app/imports` is a four-step CSV import built on the live synchronous `POST /contacts/import`:
+
+- **Upload** — download a client-generated template with the canonical headers, or drop a CSV up to
+  10 MB. Files with the wrong type, an unusable encoding, no header row, no contact rows, or more
+  than 5,000 rows are rejected with a clear message before anything is sent. Recent imports with an
+  open rollback window stay on this step.
+- **Map columns** — the browser parses comma, semicolon, and tab delimited files (quoted fields and
+  CRLF included), detects the headers, and auto-maps common spellings such as `Work Email`,
+  `First Name`, and `Lead Source`. Only email is required; a column can be used by one field at a
+  time, and the review button stays disabled until an email column is mapped.
+- **Review** — validation runs locally, then the browser reads up to 1,000 contacts and 1,000
+  suppressions to explain what already exists. Six counts cover rows in file, new contacts,
+  existing, suppressed, in-file duplicate rows, and rows to fix; a filterable preview explains each
+  row. Choose **Skip duplicates**, **Update existing**, or **Build a review queue**. Suppressed
+  addresses are always skipped. Update mode applies names, title, phone, LinkedIn, and source to
+  matching contacts; review mode holds existing, suppressed, and role-based rows without importing.
+- **Import and report** — the canonical CSV is posted as `multipart/form-data` (field name `file`)
+  with a staged progress panel. Update mode then PATCHes each existing contact and reports per-row
+  failures. The report shows imported, updated, skipped, suppressed, review, and error totals, tabs
+  with row-level detail and whether the browser or API caught each row, a downloadable CSV report,
+  and a 24-hour rollback card.
+
+Rollback records live in this browser (`reyvo.importRollbacks.v1`, 10 most recent, kept 7 days).
+Rolling back deletes only contacts created by that import, keeps contacts that have since been
+contacted or replied, and never reverts updates or removes companies. The window closes after 24
+hours and is not shared across browsers.
+
+The API matches only canonical headers and has no upload-preview, mapping, progress, update-mode, or
+rollback endpoints, so `src/lib/imports.js` owns parsing, header aliases, validation, canonical CSV
+serialization, the template, the multipart adapter, the capped workspace index, mode planning,
+update calls, report assembly, and rollback execution. Tenant-wide duplicate and suppression checks
+still run server-side; rows beyond the 1,000-record index cap are reported as server summary counts.
 
 ### Shared UI kit
 

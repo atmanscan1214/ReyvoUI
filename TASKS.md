@@ -240,21 +240,136 @@ marketing site and auth entry pages already exist and are not repeated here.
     passes.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
 
-- [ ] **T12 — Contacts** · L · deps: T07 · §5.2.1
+- [x] **T12 — Contacts** · L · deps: T07 · §5.2.1
   - List, filters, detail, create/edit/delete, statuses, tags, last contacted/replied.
   - Done when: a contact can be created manually and viewed with company context.
+  - Built on the live `/contacts` CRUD API: URL-synced search (300 ms debounce), status filter,
+    company filter sampled from `/companies?limit=100`, and pagination on the list; overview facts
+    (including last contacted/replied), notes, tags, custom fields, company context card, and
+    email-health explanation on the detail page; one shared modal for create and edit with a
+    searchable company picker (`/companies?search=`), repeatable custom fields, and server
+    field-error mapping.
+  - Status is create-ignored by the API (`ContactCreate` starts contacts at `new`), so the create
+    form explains that and exposes status only on edit through `PATCH`. Email health is accepted on
+    create only (`ContactUpdate` has no `email_status`), so edit shows it read-only. Duplicate email
+    returns `409`; the form marks the email field and keeps the typed values.
+  - Tags have no API endpoint; development builds store them per browser under
+    `reyvo.contactTags.v1` and label the feature browser-only, while production reports them
+    unavailable. Company names and the detail company card come from `/companies/{id}` and the
+    sampled company list, since `ContactRead` carries only `company_id`.
+  - Permission state mirrors T11: owner/admin get write controls, members get a read-only notice and
+    no create, edit, or delete affordances, and `403`s are handled gracefully on reads and writes.
+  - Verified in the browser: created a contact with company, source, phone, notes, and a tag; landed
+    on the detail page with the company card and tag; edited status and a custom field and saw both
+    persist; created a second contact from a company-scoped list and confirmed the company was
+    preselected and email health persisted; duplicate email showed the 409 banner and field error;
+    search, status, company filters, and filtered-empty states worked; delete returned to the
+    company-scoped list. Loading skeletons, 500 error with request id and retry, and stubbed 403
+    list/detail/write states all render correctly; a member session hid every write action. Checked
+    at 375 / 768 / 1024 / 1440 px with no page-level horizontal overflow and no unexpected console
+    errors; `npm run build` passes.
+  - Done when: a contact can be created manually and viewed with company context.
 
-- [ ] **T13 — CSV import: upload and column mapping** · L · deps: T12 · §5.2.2
+- [x] **T13 — CSV import: upload and column mapping** · L · deps: T12 · §5.2.2
   - Template download, file validation, upload, detected columns, mapping to contact/company fields.
+  - The current API exposes one synchronous multipart import (`POST /contacts/import`) that matches
+    canonical headers exactly. There is no preview or mapping parameter, presigned upload, progress
+    job, or rollback yet, so `src/lib/imports.js` parses and validates the CSV in the browser, maps
+    common header aliases, rewrites the rows that pass browser validation with canonical headers,
+    posts them, and normalizes the returned `ImportReport`. Missing/invalid emails and overlong
+    values are shown at review with file row numbers and are not uploaded; duplicates and
+    suppressions remain server-side skips. Update-existing choices, background progress, and the
+    24-hour rollback stay in T14.
+  - The screen adds a client-generated template, `UploadDropzone` type/size checks, comma/semicolon/
+    tab and quoted CSV parsing, a four-step stepper, detected-column mapping, row-level review
+    counts, and a report that merges browser-caught and server-returned errors. Owners and admins
+    can import; members get a read-only card with template access. Import `403`/`500` responses show
+    the request id, with retry for server failures.
+  - Verified in the browser: a mixed CSV (valid, invalid email, in-file duplicate, valid) auto-mapped
+    7 of 10 columns and reached review with 4 rows, 2 ready, 1 duplicate, and 1 to fix; importing
+    returned 2 imported, 1 duplicate skipped, and 1 not imported, and the created contacts carried
+    the mapped company, title, phone, and source (test contacts deleted). A file with no email
+    column showed the mapping error and disabled review; a `.txt` upload was rejected; BOM,
+    semicolon delimiter, quoted values, and the alias/validation helpers were checked in the
+    browser. Mocked import `403` and `500` states showed the right error panels and request ids; a
+    member session hid the upload flow. Checked at 375 / 768 / 1024 / 1440 px with no page-level
+    horizontal overflow and no unexpected console errors; `npm run build` passes.
   - Done when: a valid CSV reaches a review step and an invalid file shows row-level errors.
 
-- [ ] **T14 — CSV import: validation, duplicates, progress, report, rollback** · L · deps: T13 · §5.2.2
+- [x] **T14 — CSV import: validation, duplicates, progress, report, rollback** · L · deps: T13 · §5.2.2
   - Preview counts, skip/update/review choices, suppression warnings, background progress, report, 24h rollback.
+  - The API still has no preview, job, update-mode, or rollback endpoint: `POST /contacts/import` is
+    one synchronous multipart request that skips duplicates and suppressions itself.
+    `src/lib/imports.js` therefore reads the tenant contact and suppression lists (capped at 1,000
+    records each, with truncation labelled), enriches every row, and classifies it for the chosen
+    mode. **Skip duplicates** posts only clean new rows. **Update existing** posts new rows and then
+    applies names, title, phone, LinkedIn, and source through `PATCH /contacts/{id}` (company is
+    left unchanged because `ContactUpdate` only accepts `company_id`). **Build a review queue**
+    posts clean new rows and holds existing, suppressed, and role-based rows without importing them.
+  - The review step now shows six counts (rows, new, existing, suppressed, duplicate rows, rows to
+    fix), filterable 50-row preview with per-row explanations, index lookup states, mode cards with
+    live consequences, and truncation warnings. The import runs with a staged progress panel
+    (prepare, upload/validate, update loop with per-contact progress, build report). The report has
+    imported / updated / skipped / suppressed / review / error totals, category tabs with row-level
+    detail and who caught each row (browser or API), a downloadable CSV report, and explicit notes
+    when server summary counts cover rows beyond the browser index cap.
+  - Rollback records are stored in this browser (`reyvo.importRollbacks.v1`, 10 most recent, pruned
+    after 7 days) with a 24-hour window. Rolling back searches each submitted email, deletes only
+    contacts created by that import, keeps contacts that have since been contacted or replied, and
+    never reverts updates or deletes companies. Recent imports stay on the upload step so a rollback
+    can still be run after leaving the report.
+  - Verified live in the browser with a 100-row fixture: 2 existing demo contacts, 2 temporarily
+    suppressed addresses, 3 invalid emails, 2 duplicate rows (4 rows across two repeated emails),
+    2 role-based inboxes, and 91 new contacts. Review showed 100 rows / 91 new / 2 existing / 2
+    suppressed / 2 duplicate rows / 3 to fix, with matching warnings. Import sent 91 rows and the
+    report explained all 100: Imported 91, Skipped 4 (2 existing, 2 in-file duplicates), Suppressed
+    2, Errors 3. Rollback removed the 91 created contacts and the workspace returned from 95 to the
+    4 demo contacts. Update mode PATCHed a temporary contact (names, title, phone, source changed;
+    company untouched) and reported Updated 1. Review mode held the existing and role rows, imported
+    1 clean row, and left the existing contact's title unchanged. Suppressions and test contacts were
+    removed afterwards. Checked at 375 / 768 / 1024 / 1440 px with no page-level horizontal overflow,
+    no clipped action rows, and no unexpected console errors; `npm run build` passes.
+  - Limits: the browser preview is a capped list scan, not a server preview, so tenants above 1,000
+    contacts or suppressions can still have server-only skips shown as summary counts. Rollback is
+    browser-local, so it is unavailable from another browser and stops after 24 hours.
   - Done when: a 100-row fixture can be imported and its skipped/suppressed/error rows are explained.
 
-- [ ] **T15 — Export, bulk actions, duplicate merge** · M · deps: T12 · §5.2.2, §5.2.3
+- [x] **T15 — Export, bulk actions, duplicate merge** · M · deps: T12 · §5.2.2, §5.2.3
   - Export the filtered view with CSV-injection protection; bulk archive/update; merge duplicates.
-  - Done when: export and merge are audited and reflected in the contact list.
+  - `src/lib/contactBulk.js` pages the live `/contacts` list with the active search, status, and company
+    filters (100 per page, capped at 5,000) and pages `/companies` for names and domains. It writes a
+    UTF-8 BOM CSV with the API export columns plus `status` and `created_at`, and prefixes cells that
+    begin with `=`, `+`, `-`, or `@` (plus tab and carriage return) with a single quote. Filtered views
+    get a `-filtered` filename. The existing `GET /contacts/export` is not used because it ignores
+    filters, does not sanitize formula-leading values, and is not audited.
+  - The list adds owner/admin row selection and a bulk bar: **Archive** sets `status: archived`, and
+    **Update fields** sets optional status, company assignment/removal, and source. Each record is a
+    separate sequential `PATCH /contacts/{id}` with progress, partial-failure counts, and the selection
+    retained for a retry. Members stay read-only; export remains available to any role that can view
+    contacts because no owner setting disables member export.
+  - **Merge duplicates** scans up to 1,000 contacts and groups them by normalized name plus
+    `company_id`, because emails are unique. The owner/admin chooses the survivor; blank fields
+    (including company and LinkedIn URL), custom fields, and dev-only tags are combined, the survivor
+    is PATCHed, and each duplicate is DELETEd. The dialog warns that deletion is permanent.
+  - Verified live with temporary contacts. A filtered export of an injection fixture produced two CSV
+    lines with BOM bytes `EF BB BF`, the expected headers and company domain, `'=2+2` and
+    `'@SUM(A1:A2)` prefixes, and only the filtered row. Bulk archive moved two temp contacts to
+    `archived`; bulk update moved both to `contacted`, source `T15 bulk update`, and the Northwind
+    company. Merge filled the survivor's phone and LinkedIn URL, deleted the duplicate, and refreshed
+    the list to one row. The tenant audit log gained five `contact.updated` entries and one
+    `contact.deleted` entry covering both bulk contacts, the merge survivor, and the merged duplicate.
+    Checked at 375 / 768 / 1024 / 1440 px: no page-level horizontal overflow, the data table scrolls
+    internally, the bulk bar and both dialogs fit at 375, and there were no console errors;
+    `npm run build` passes.
+  - Limits: this API build has no export-audit endpoint, so downloads cannot be written to the audit
+    trail. Filtered export and duplicate scanning are client-side and capped (5,000 export, 1,000
+    scan). Merge has no server endpoint, tombstone, 30-day undo, or related-record transfer, so
+    campaigns, opportunities, tasks, and activities are not moved. Duplicate detection is name plus
+    company rather than the design's no-email key, because the API requires an email and enforces
+    uniqueness on it. Bulk changes and merges run as individual requests rather than a transaction.
+  - Done when: export and merge are audited and reflected in the contact list. Merge is audited through
+    `contact.updated` / `contact.deleted` and reflected in the list; export is reflected in the list but
+    cannot be audited in this API build.
 
 - [ ] **T16 — Lists, tags, and segment builder** · L · deps: T12 · §5.2.4
   - Static lists, tags, AND/OR segment rules, operators, live count preview, save/edit.
@@ -436,8 +551,11 @@ marketing site and auth entry pages already exist and are not repeated here.
 2. ~~**T02** — backend restore / mock-first approval~~ ✅
 3. ~~**T03** — API contract map and client baseline~~ ✅
 4. ~~**T04** — app shell~~ ✅
-5. **T05** — routing and role guards (the signed-out redirect already exists).
-6. **T06** — session/tenant context and workspace switcher.
+5. ~~**T05** — routing and role guards~~ ✅
+6. ~~**T06** — session/tenant context and workspace switcher~~ ✅
+7. ~~**T12** — contacts CRUD and detail~~ ✅
+8. ~~**T13** — CSV import upload and column mapping~~ ✅
+9. **T14** — CSV import validation, duplicates, progress, report, and rollback.
 
-After those, follow the milestone order: onboarding → leads/import → inboxes → campaigns → sending →
-replies/pipeline → reporting → billing/admin → hardening.
+After T14, follow the milestone order: export and bulk actions → lists and segments → inboxes →
+campaigns → sending → replies/pipeline → reporting → billing/admin → hardening.
