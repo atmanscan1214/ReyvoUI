@@ -10,6 +10,7 @@ import {
   subscribeSession,
 } from './auth'
 import { forgetWorkspace, readWorkspaces, rememberSession } from './workspaces'
+import { applyLocalProfile } from './account'
 
 const SessionContext = createContext(null)
 
@@ -80,7 +81,7 @@ export function SessionProvider({ children }) {
     api
       .me(controller.signal)
       .then((data) => {
-        setProfile(data)
+        setProfile(applyLocalProfile(data))
         setProfileStatus('ready')
       })
       .catch((error) => {
@@ -131,6 +132,13 @@ export function SessionProvider({ children }) {
     if (!nextTenant) return
     setTenantDetails((current) =>
       current ? { ...current, ...nextTenant } : nextTenant,
+    )
+  }
+
+  function updateUser(patch) {
+    if (!patch) return
+    setProfile((current) =>
+      current?.user ? { ...current, user: { ...current.user, ...patch } } : current,
     )
   }
 
@@ -231,6 +239,7 @@ export function SessionProvider({ children }) {
     retryProfile,
     retryTenant,
     updateTenant,
+    updateUser,
     workspaces,
     switchingTo,
     switchError,

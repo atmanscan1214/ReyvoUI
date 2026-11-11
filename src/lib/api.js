@@ -257,6 +257,21 @@ export const api = {
   mfaEnroll: (payload) => authedRequest('/auth/mfa/enroll', { method: 'POST', body: payload }),
   mfaVerify: (payload) => request('/auth/mfa/verify', { method: 'POST', body: payload }),
 
+  // Provisional T10 paths. The current API build exposes only `GET /auth/me`,
+  // so src/lib/account.js documents the development-only fallbacks.
+  updateMe: (payload) => authedRequest('/auth/me', { method: 'PATCH', body: payload }),
+  requestEmailChange: (payload) =>
+    authedRequest('/auth/email-change', { method: 'POST', body: payload }),
+  confirmEmailChange: (payload) =>
+    authedRequest('/auth/email-change/confirm', { method: 'POST', body: payload }),
+  changePassword: (payload) =>
+    authedRequest('/auth/password/change', { method: 'POST', body: payload }),
+  sessions: (signal) => authedRequest('/auth/sessions', { signal }),
+  revokeSession: (sessionId) =>
+    authedRequest(`/auth/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
+  revokeAllSessions: (payload) =>
+    authedRequest('/auth/sessions/revoke-all', { method: 'POST', body: payload }),
+
   // Generic authenticated helpers. Product modules should use these instead of
   // calling fetch directly, so auth refresh and error parsing stay in one place.
   get: (path, options = {}) => authedRequest(path, options),

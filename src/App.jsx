@@ -20,11 +20,15 @@ import { AppNotFound, AppPlaceholder } from './pages/app/AppPlaceholder'
 import { APP_AREAS, isRestrictedArea } from './pages/app/navigation'
 import { UiKitPage } from './pages/app/ui-kit/UiKitPage'
 import { SecurityPage } from './pages/app/security/SecurityPage'
+import { AccountPage } from './pages/app/account/AccountPage'
+import { CompaniesPage } from './pages/app/companies/CompaniesPage'
+import { CompanyDetailPage } from './pages/app/companies/CompanyDetailPage'
 import { SessionProvider } from './lib/session'
 import './components/ui/ui.css'
 
 const AREA_ROUTES = Object.entries(APP_AREAS).filter(
-  ([key]) => key !== 'dashboard' && key !== 'security',
+  ([key]) =>
+    key !== 'dashboard' && key !== 'security' && key !== 'account' && key !== 'companies',
 )
 
 export default function App() {
@@ -79,6 +83,9 @@ export default function App() {
                 </AreaGuard>
               }
             />
+            <Route path="settings/account" element={<AccountPage />} />
+            <Route path="companies" element={<CompaniesPage />} />
+            <Route path="companies/:companyId" element={<CompanyDetailPage />} />
             {AREA_ROUTES.map(([key, area]) => (
               <Route
                 key={key}

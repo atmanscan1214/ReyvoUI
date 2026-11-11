@@ -110,6 +110,47 @@ export function PasswordField({
   )
 }
 
+export function TextareaField({
+  id,
+  label,
+  error,
+  hint,
+  optional = false,
+  className = '',
+  rows = 4,
+  ...textareaProps
+}) {
+  const describedById = describedBy({ id, error, hint })
+
+  return (
+    <div className={`field ${error ? 'field--invalid' : ''} ${className}`.trim()}>
+      <label className="field__label" htmlFor={id}>
+        {label}
+        {optional ? <span className="field__optional">Optional</span> : null}
+      </label>
+
+      <textarea
+        id={id}
+        className="field__input field__textarea"
+        rows={rows}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={describedById}
+        {...textareaProps}
+      />
+
+      {error ? (
+        <p className="field__error" id={`${id}-error`}>
+          {error}
+        </p>
+      ) : hint ? (
+        <p className="field__hint" id={`${id}-hint`}>
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function SelectField({
   id,
   label,

@@ -82,6 +82,9 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/verify-email` | Verify email    | Verification status, auto-verify from a token, and resend (provisional; see below) |
 | `/app`      | Dashboard           | Authenticated shell; placeholder overview until T38           |
 | `/app/settings/security` | Security | Two-factor enrollment, disable, and the password-reset entry point |
+| `/app/settings/account` | Account | Profile, email change, password change, and active sessions |
+| `/app/companies` | Companies | Live company list with search, industry filter, pagination, and create |
+| `/app/companies/:companyId` | Company detail | Overview, notes, custom fields, attached people, edit, and delete |
 | `/app/*`    | App areas           | Replies, campaigns, pipeline, contacts, mailboxes, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
@@ -117,6 +120,7 @@ src/
     welcome/         WelcomeLayout, checklist, address form, verify-email + welcome.css
     app/             AppLayout, AreaGuard, placeholder screens, navigation model, app.css
       security/      SecurityPage.jsx + security.css
+      companies/     CompaniesPage, CompanyDetailPage, CompanyFormModal + companies.css
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -230,6 +234,51 @@ expired, invalid, and already-used links) so every state can be exercised withou
 an authenticator app. Production builds never fake these flows: they surface an
 “unavailable on this API build” error instead. See
 [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#password-reset-mfa-and-invitations-not-implemented).
+
+### Account settings
+
+`/app/settings/account` holds four tabs, each backed by the live profile where possible:
+
+- **Profile** — display-name edit, member-since date, role, and the sign-in address. Saving applies
+  the new name to the session immediately.
+- **Email** — changing the sign-in address requires the current password and renders a 24-hour
+  verification-pending state with cancel and confirm actions. Confirming revokes the other sessions.
+- **Password** — current password, new password with the shared strength meter, confirmation, and a
+  success banner. A successful change revokes every other session.
+- **Sessions** — active browsers and devices with location, IP, last activity, and a “this device”
+  marker. Individual sign-out, “sign out other sessions”, and “sign out everywhere” all require
+  confirmation; the global action returns to `/login`.
+
+The API build exposes only `GET /auth/me`, so profile, email, password, and session actions use
+provisional paths plus development-only records in `reyvo.account.v1` and `reyvo.sessions.v1`.
+Development verifies the current password against the live login route and keeps changes in this
+browser; production reports the action as unavailable instead of faking an API write. The email note
+explains that the server still holds the original address until the endpoint ships. See
+[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#account-settings-not-implemented).
+
+### Companies
+
+`/app/companies` is the first screen on the real leads API, with no fallbacks:
+
+- **List** — debounced search on name and domain (300 ms), an exact industry filter sampled from
+  `GET /companies?limit=100`, and pagination. Search, industry, and page live in the URL, so a
+  filtered view is shareable and survives reload.
+- **Detail** — overview facts, notes, custom fields, and a People card fed by
+  `GET /contacts?company_id=`. Missing, restricted, and failed loads each get their own state.
+- **Create and edit** — one modal covers both, including repeatable custom-field rows. Server field
+  errors map back onto the form, and a 403 stays on the form with a role-specific banner instead of
+  losing the typed values.
+- **Duplicate warning** — the API does not enforce company uniqueness, so the form probes
+  `/companies?search=` first and warns when a record shares the normalized domain, or the normalized
+  name when neither side has a domain and the locations do not conflict. “Save anyway” is an
+  explicit second step.
+- **Delete** — confirmation explains that contacts stay in the workspace and are detached, matching
+  `DELETE /companies/{id}`.
+- **Permissions** — owner and admin get write controls; members get a read-only notice and no create,
+  edit, or delete affordances. The API build has no RBAC on `/companies`, so this is a UI policy plus
+  graceful 403 handling for when it is enforced server-side.
+
+`src/lib/companies.js` owns normalization, validation, payload mapping, and duplicate detection.
 
 ### Shared UI kit
 

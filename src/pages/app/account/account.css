@@ -1,0 +1,491 @@
+/* ---------------------------------------------------------------------------
+   Account settings (profile, email, password, active sessions)
+   --------------------------------------------------------------------------- */
+
+.account-page__body {
+  max-width: 920px;
+  margin-top: 30px;
+}
+
+.account-tabs__panel {
+  padding-top: 18px;
+}
+
+.account__card {
+  min-width: 0;
+}
+
+.account__panel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.account__panel-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+}
+
+.account__panel-head > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.account__panel-head h2 {
+  font-size: 1.06rem;
+  letter-spacing: -0.02em;
+}
+
+.account__panel-head p {
+  margin-top: 5px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.account__identity {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--paper);
+}
+
+.account__avatar {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--lime);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.account__identity-name {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.account__identity-meta {
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.account__form {
+  display: grid;
+  gap: 17px;
+  margin-top: 22px;
+}
+
+.account__readonly {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.account__readonly > span,
+.account__field-label {
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.account__readonly strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.account__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.account__actions--spread {
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.account__inline-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.account__inline-link {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.account__inline-link:hover {
+  color: var(--ink);
+}
+
+.account__meta-email {
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.account__meta-tenant {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.account__devnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px dashed #e0c98c;
+  border-radius: 10px;
+  background: #fdf7e8;
+  font-size: 0.73rem;
+  line-height: 1.55;
+  color: #7a5b16;
+}
+
+.account__devnote code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.72rem;
+  color: #5f4712;
+}
+
+.account__devnote .ui-badge {
+  flex: none;
+}
+
+.account__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #ecc8c2;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+.account__error svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* Email ------------------------------------------------------------------ */
+
+.account__email-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.account__email-state > div {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+
+.account__email-value {
+  margin-top: 3px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.account__banner {
+  margin-top: 18px;
+  padding: 13px 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  font-size: 0.79rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.account__banner-title {
+  margin-bottom: 2px;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.account__banner--success {
+  border-color: #c9e6cd;
+  background: #f0faf1;
+  color: #2f6b3b;
+}
+
+.account__banner--success .account__banner-title {
+  color: #24602f;
+}
+
+.account__banner--warning {
+  border-color: #e6d3a1;
+  background: #fdf7e8;
+  color: #7a5b16;
+}
+
+.account__banner--warning .account__banner-title {
+  color: #5f4712;
+}
+
+.account__banner--danger {
+  border-color: #ecc8c2;
+  background: var(--danger-soft);
+  color: #8c2f22;
+}
+
+.account__banner--danger .account__banner-title {
+  color: var(--danger);
+}
+
+.account__pending {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid #e6d3a1;
+  border-radius: 12px;
+  background: #fdf7e8;
+}
+
+.account__pending-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account__pending-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 9px;
+  background: #f3e6bd;
+  color: #7a5b16;
+}
+
+.account__pending-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #5f4712;
+}
+
+.account__pending-email {
+  margin-top: 1px;
+  font-size: 0.82rem;
+  color: #7a5b16;
+  overflow-wrap: anywhere;
+}
+
+.account__pending-note {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: #7a5b16;
+}
+
+.account__pending--expired {
+  border-color: #ecc8c2;
+  background: var(--danger-soft);
+}
+
+.account__pending--expired .account__pending-title {
+  color: var(--danger);
+}
+
+.account__pending--expired .account__pending-note {
+  color: #8c2f22;
+}
+
+.account__last-changed {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+/* Sessions --------------------------------------------------------------- */
+
+.account__loading {
+  margin-top: 22px;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.account__sessions {
+  display: grid;
+  gap: 1px;
+  margin-top: 22px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--line);
+}
+
+.account__session {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  background: var(--paper);
+}
+
+.account__session-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+}
+
+.account__session-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.account__session-device {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.account__session-detail {
+  margin-top: 1px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.account__session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 0.71rem;
+  color: var(--muted);
+}
+
+.account__session-action {
+  flex: none;
+}
+
+.account__empty {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.account__empty-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.account__empty p + p {
+  margin-top: 4px;
+  font-size: 0.79rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.account__empty .btn {
+  margin-top: 12px;
+}
+
+.account__dialog-note {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .account__panel-head {
+    flex-wrap: wrap;
+  }
+
+  .account__devnote {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .account__actions .btn {
+    flex: 1 1 100%;
+  }
+
+  .account__actions--spread {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .account__session {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px 12px;
+    align-items: start;
+  }
+
+  .account__session-action {
+    grid-column: 2;
+    margin-left: 0;
+    justify-self: start;
+  }
+
+  .account__identity {
+    align-items: flex-start;
+  }
+}

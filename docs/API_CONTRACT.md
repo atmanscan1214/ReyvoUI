@@ -227,6 +227,28 @@ challenges, 5-attempt lock), and `reyvo.invites.v1` (7-day invitations). The scr
 state-switching link “Development only”. Production builds surface an honest unavailable error
 instead of faking success. When the real endpoints ship, only the adapters need to change.
 
+### Account settings (not implemented)
+
+The snapshot exposes only `GET /auth/me`. `src/lib/account.js` defines provisional paths for the T10
+actions:
+
+| Action | Provisional endpoint | Body | Expected behaviour |
+|---|---|---|---|
+| Profile | `PATCH /auth/me` | `{ full_name }` | Update the current user’s display name |
+| Email change | `POST /auth/email-change` | `{ email, current_password }` | Verify the password, then send a signed link to the new address |
+| Email confirm | `POST /auth/email-change/confirm` | `{ token }` | Apply the new address and invalidate every session |
+| Password change | `POST /auth/password/change` | `{ current_password, new_password }` | Rotate the password and invalidate every other session |
+| Sessions | `GET /auth/sessions` | — | List active sessions with device, IP, and last activity |
+| Sessions | `DELETE /auth/sessions/{id}` | — | Revoke one session |
+| Sessions | `POST /auth/sessions/revoke-all` | `{ keep_current }` | Revoke every session, or every other session |
+
+A `404`/`405` in a **development build** falls back to `reyvo.account.v1` (name override, pending
+24-hour email change, password-change timestamp) and `reyvo.sessions.v1` (demo session list).
+Development verifies the current password with the live `POST /auth/login` route before recording an
+email or password change, and revokes the other demo sessions on success. It cannot rotate the server
+password or deliver mail, so the UI states that limitation and production builds report the feature
+as unavailable. When the real endpoints ship, only the adapter needs to change.
+
 ### Tenant, team, usage, audit
 
 | Endpoint | Purpose |
@@ -248,6 +270,21 @@ instead of faking success. When the real endpoints ship, only the adapters need 
 | `GET /companies/{id}` | Detail |
 | `PATCH /companies/{id}` | Update |
 | `DELETE /companies/{id}` | Delete |
+
+`Company` fields: `name`, `domain`, `industry`, `employee_count`, `city`, `state`, `country`,
+`website`, `linkedin_url`, `source`, `status` (read-only, defaults to `active`), `notes`,
+`custom_fields`, `created_at`, `updated_at`.
+
+- `search` is a case-insensitive substring match on the normalized name and domain; `industry` is an
+  exact match. There is no industries endpoint, so the frontend samples `GET /companies?limit=100` to
+  build its filter options.
+- The server writes `normalized_name` and `normalized_domain` but enforces no uniqueness, so duplicate
+  prevention is a frontend warning (see below).
+- `DELETE` detaches the company's contacts (`company_id` set to `null`); contacts are never deleted
+  with a company.
+- No RBAC is wired up on this router yet: `require_roles` exists in `reyvo/api/deps.py` but is unused,
+  so a `member` can still write through the API. The UI treats `owner`/`admin` as writable, `member`
+  as read-only, and handles a `403` gracefully.
 
 ### Contacts, import, export
 
@@ -394,6 +431,7 @@ tenant timezone; display it next to the date range.
 | Password reset | provisional `/auth/password/*` |
 | MFA | provisional `/auth/mfa/*` |
 | Invitations | provisional `/invites` |
+| Account settings | `/auth/me` (read), provisional `/auth/*` and `/auth/sessions*` |
 | Companies | `/companies` |
 | Contacts | `/contacts`, `/contacts/{id}` |
 | Import | `/contacts/import`, `/lists` |
@@ -437,5 +475,9 @@ These are backend extension points per `DEVELOPER_GUIDE.md`; the UI must not imp
   above are client-side conventions; development builds keep single-use, time-boxed records in
   `reyvo.passwordResets.v1`, `reyvo.mfa.v1`, and `reyvo.invites.v1` and production builds report the
   feature as unavailable.
+- There are no profile, email-change, password-change, or session endpoints. The T10 provisional
+  paths above are client-side conventions; development keeps records in `reyvo.account.v1` and
+  `reyvo.sessions.v1`, verifies the current password against the live login route, and production
+  builds report the features as unavailable.
 - Sources under `ReyvoAPI/ReyvoApi/src/reyvo/*.py` were missing at capture time. The API was
   reachable from a running process, but restarting it may require restoring the sources.

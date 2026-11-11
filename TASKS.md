@@ -180,18 +180,64 @@ marketing site and auth entry pages already exist and are not repeated here.
   - Verified end to end in the browser: requested a reset and opened the valid, expired, and
     replayed links; created, accepted, reused, and expired an invitation; enrolled MFA, was
     challenged at the next sign-in, submitted a wrong code (inline error), then verified and
-    continued to the workspace. Every state also checked at 375 / 768 / 1024 / 1440 px; no console
-    errors; `npm run build` passes.
+    continued to the workspace; also opened the expired, invalid, already-used, and locked
+    challenge states. Every page checked at 375 / 768 / 1024 / 1440 px with no horizontal
+    overflow; the provisional invite lookup logs one 404 by design and no unexpected console
+    errors appear; `npm run build` passes. The security page wrapper was renamed to
+    `.security-page` after its `.security` class collided with the marketing page's dark security
+    section.
   - Done when: each flow has success, expired-token, and invalid-token states.
 
-- [ ] **T10 — Account settings** · M · deps: T06 · §5.11
-  - Profile, email change, password change, active sessions, sign-out-all.
+- [x] **T10 — Account settings** · M · deps: T06 · §5.11
+  - `/app/settings/account` has four tabs: **Profile** (display name applied to the session immediately,
+    role, member-since date, read-only sign-in email), **Email** (new address plus current password, a
+    24-hour verification-pending state with confirm and cancel, and confirmed / expired states),
+    **Password** (current password, the shared 12+ character rule and strength meter, confirmation,
+    success banner, and last-changed timestamp), and **Sessions** (current device plus other devices
+    with location, IP, and last activity).
+  - Individual sign-out, “sign out other sessions”, and “sign out everywhere” each require a
+    confirmation dialog. Signing out everywhere clears the session and every remembered workspace,
+    then returns to `/login`. A successful email or password change revokes the other sessions.
+  - The API build exposes only `GET /auth/me`, so the page tries provisional `PATCH /auth/me`,
+    `/auth/email-change*`, `/auth/password/change`, and `/auth/sessions*` first. Development builds
+    fall back to `reyvo.account.v1` and `reyvo.sessions.v1`, verify the current password against the
+    live login route, and label every fallback; production builds report the action as unavailable.
+    The email note states that the server keeps the original sign-in address until the endpoint ships.
+    Documented in `README.md` and `docs/API_CONTRACT.md`.
+  - Verified in the browser: saved a display name and saw it persist after reload in the header and
+    profile; started an email change with a wrong and then the right current password, confirmed the
+    pending 24-hour state, and saw the other sessions revoked; changed the password with a wrong
+    current password (inline error) then the correct one (success banner); revoked one session, signed
+    out other sessions, and signed out everywhere back to `/login`. All four tabs checked at
+    375 / 768 / 1024 / 1440 px with no horizontal overflow; the provisional session list logs one 404
+    by design; `npm run build` passes. Mobile session rows use a two-column grid and development notes
+    stack their badge at 640px and below.
   - Done when: changes persist through the API and security actions require confirmation.
 
 ## Leads and audience
 
-- [ ] **T11 — Companies** · L · deps: T07 · §5.2.1
+- [x] **T11 — Companies** · L · deps: T07 · §5.2.1
   - List, filters, detail, create/edit/delete, notes, custom fields.
+  - Done when: empty, loading, duplicate-warning, and permission states are covered.
+  - Built on the live `/companies` CRUD API with no fallbacks: URL-synced search (300 ms debounce),
+    industry filter, and pagination on the list; overview, notes, custom fields, and a People card
+    (`GET /contacts?company_id=`) on the detail page; one shared modal for create and edit with
+    repeatable custom-field rows, server field-error mapping, and a 403 banner that keeps typed values.
+  - Duplicate warning: because the API enforces no uniqueness, the form probes `/companies?search=`
+    and warns on a matching normalized domain, or a matching name when neither record has a domain
+    and the locations do not conflict. “Save anyway” is a deliberate second click. `www.` is stripped
+    before comparison.
+  - Permission state: owner/admin get write controls, members get a read-only notice and no create,
+    edit, or delete affordances. The API has no RBAC on `/companies` yet, so this is a UI policy plus
+    graceful 403 handling on read and write.
+  - Verified in the browser: six seeded companies rendered with correct industry options and counts;
+    search, industry filter, and filtered-empty states; row click to detail; create with duplicate
+    warning then “Save anyway”; edit persisted employees, notes, and custom fields after reload;
+    attached contacts showed with email-status badges; delete confirmation explained contact detach
+    and returned to the list; loading skeletons, 500 error with request id and retry, and stubbed 403
+    states for both list and detail. Read-only member session hid every write action. Checked at
+    375 / 768 / 1024 / 1440 px with no horizontal overflow and no console errors; `npm run build`
+    passes.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
 
 - [ ] **T12 — Contacts** · L · deps: T07 · §5.2.1

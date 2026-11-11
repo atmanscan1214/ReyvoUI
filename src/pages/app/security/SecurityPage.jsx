@@ -11,6 +11,7 @@ import {
   Shield,
 } from '../../../components/icons'
 import {
+  MFA_CHALLENGE_TTL_MS,
   beginMfaEnrollment,
   cancelMfaEnrollment,
   confirmMfaEnrollment,
@@ -175,6 +176,19 @@ export function SecurityPage() {
     navigate(`/mfa/challenge?challenge=${encodeURIComponent(challenge.id)}`)
   }
 
+  function handleDevChallenge(kind) {
+    if (!user?.id) return
+    if (kind === 'invalid') {
+      navigate('/mfa/challenge?challenge=not-a-valid-challenge')
+      return
+    }
+
+    const challenge = createMfaChallenge(user.id, {
+      ageMs: kind === 'expired' ? MFA_CHALLENGE_TTL_MS + 60_000 : 0,
+    })
+    navigate(`/mfa/challenge?challenge=${encodeURIComponent(challenge.id)}`)
+  }
+
   async function handleDisable() {
     if (!user?.id) return
     setDisableError(null)
@@ -228,7 +242,7 @@ export function SecurityPage() {
         }
       />
 
-      <div className="security">
+      <div className="security-page">
         <section className="app-card security__mfa" aria-labelledby="mfa-heading">
           <header className="security__section-head">
             <span className="security__icon" aria-hidden="true">
@@ -286,6 +300,28 @@ export function SecurityPage() {
                   Turn off MFA
                 </Button>
               </div>
+
+              {import.meta.env.DEV ? (
+                <div className="security__dev-actions">
+                  <p className="security__dev-actions-title">Development challenge states</p>
+                  <div className="security__dev-buttons">
+                    <button
+                      type="button"
+                      className="security__dev-btn"
+                      onClick={() => handleDevChallenge('expired')}
+                    >
+                      Expired challenge
+                    </button>
+                    <button
+                      type="button"
+                      className="security__dev-btn"
+                      onClick={() => handleDevChallenge('invalid')}
+                    >
+                      Invalid challenge
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               {disableOpen ? (
                 <div className="security__disable">
@@ -465,7 +501,8 @@ export function SecurityPage() {
               <ArrowRight size={15} />
             </Link>
             <p className="security__mini-note">
-              Password change with your current password arrives with account settings in T10.
+              Change your password with your current password in Account settings. A reset link is
+              the recovery path if you have forgotten it.
             </p>
           </section>
 
@@ -477,8 +514,9 @@ export function SecurityPage() {
               <h2 id="sessions-heading">Active sessions</h2>
             </header>
             <p>
-              Individual session review and sign-out-all are part of account settings. Until then,
-              signing out clears every remembered workspace on this device.
+              Review active browsers and devices, sign out other sessions, or sign out everywhere
+              from Account settings. Signing out everywhere clears every remembered workspace on
+              this device.
             </p>
             <Link
               to="/app/settings/account"

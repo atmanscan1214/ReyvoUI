@@ -38,6 +38,10 @@ const TONES = {
   unsubscribed: 'danger',
   bounced: 'danger',
   blocked: 'danger',
+  valid: 'success',
+  risky: 'warning',
+  invalid: 'danger',
+  unknown: 'neutral',
 }
 
 export function statusTone(status) {

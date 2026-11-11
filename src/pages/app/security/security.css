@@ -2,7 +2,7 @@
    Security settings (MFA enrollment, password recovery, sessions, audit)
    --------------------------------------------------------------------------- */
 
-.security {
+.security-page {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
   gap: clamp(20px, 2.6vw, 28px);
@@ -279,6 +279,52 @@
   color: var(--ink);
 }
 
+/* Development challenge shortcuts ---------------------------------------- */
+
+.security__dev-actions {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px dashed #e0c98c;
+  border-radius: 10px;
+  background: #fdf7e8;
+}
+
+.security__dev-actions-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7a5b16;
+}
+
+.security__dev-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.security__dev-btn {
+  padding: 6px 11px;
+  border: 1px solid #e0c98c;
+  border-radius: 999px;
+  background: #fffdf5;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6a4f12;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.security__dev-btn:hover {
+  background: #fbf1d6;
+  border-color: #cdb06a;
+}
+
+.security__dev-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 /* Disable confirmation --------------------------------------------------- */
 
 .security__disable {
@@ -376,7 +422,7 @@
 }
 
 @media (max-width: 960px) {
-  .security {
+  .security-page {
     grid-template-columns: 1fr;
   }
 
@@ -399,9 +445,13 @@
     flex-wrap: wrap;
   }
 
+  .security__section-head > div {
+    flex: 1 1 calc(100% - 58px);
+  }
+
   .security__section-head > .ui-badge {
     margin-left: 58px;
-    margin-top: -6px;
+    margin-top: 0;
   }
 
   .security__actions .btn {
