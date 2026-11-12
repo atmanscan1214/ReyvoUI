@@ -416,10 +416,25 @@ are merged into the displayed report with their original row numbers.
 |---|---|
 | `GET /lists` | Array of list summaries with `contact_count` |
 | `POST /lists` | Create, optionally with `contact_ids` |
-| `GET /lists/{id}/contacts` | Paginated list membership |
-| `POST /lists/{id}/contacts` | Add `contact_ids` (min 1) |
+| `GET /lists/{id}/contacts` | Paginated list membership (`limit ≤ 100`) |
+| `POST /lists/{id}/contacts` | Add `contact_ids` (min 1); duplicates are skipped |
 | `DELETE /lists/{id}/contacts/{contact_id}` | Remove one contact |
 | `DELETE /lists/{id}` | Delete list |
+
+Behavior notes from live verification:
+
+- There is no rename/update endpoint: list name and description are immutable after creation.
+- `GET /lists` returns `contact_count`; membership pages at `limit ≤ 100`.
+- Audit actions: `list.created`, `list.contacts_added`, `list.deleted`. Member removal writes no audit
+  entry in this build.
+- **Segments and tags have no API surface.** The `segments` table exists in the database but no router
+  exposes it, and `ContactCreate`/`ContactRead`/`ContactUpdate` have no tags field. The frontend keeps
+  segments in `reyvo.segments.v1` (AND/OR rule groups evaluated client-side over a 5,000-contact
+  snapshot) and tags in `reyvo.contactTags.v1`, both labelled browser-side in the UI.
+- **Campaign audience contract:** because campaign resolution only understands `status` and
+  `company_id` from `segment.definition`, segments cannot be resolved server-side. The lists page
+  writes the pending audience (`{ key, type: 'list' | 'segment', id, name, count, typeLabel, savedAt }`)
+  to `reyvo.campaignAudience.v1` for the campaign wizard (T21) to consume.
 
 ### Suppressions
 
@@ -544,7 +559,7 @@ tenant timezone; display it next to the date range.
 | Companies | `/companies` |
 | Contacts | `/contacts`, `/contacts/{id}` |
 | Import | `/contacts/import`, `/lists` |
-| Lists and segments | `/lists`, `/lists/{id}/contacts` |
+| Lists and segments | `/lists`, `/lists/{id}/contacts` (segments + tags: browser-side, no API) |
 | Suppressions | `/suppressions` |
 | Mailboxes | `/email-accounts`, OAuth start/callback |
 | Campaigns | `/campaigns` plus lifecycle actions |
@@ -588,5 +603,10 @@ These are backend extension points per `DEVELOPER_GUIDE.md`; the UI must not imp
   paths above are client-side conventions; development keeps records in `reyvo.account.v1` and
   `reyvo.sessions.v1`, verifies the current password against the live login route, and production
   builds report the features as unavailable.
+- There is no `/segments` or `/tags` endpoint. The `segments` table exists in the database but no
+  router exposes it, and contacts have no tags field. The lists page keeps segments in
+  `reyvo.segments.v1` and tags in `reyvo.contactTags.v1`, evaluated client-side, and hands the pending
+  campaign audience to the wizard through `reyvo.campaignAudience.v1` because campaign resolution only
+  understands `status` and `company_id` from `segment.definition`.
 - Sources under `ReyvoAPI/ReyvoApi/src/reyvo/*.py` were missing at capture time. The API was
   reachable from a running process, but restarting it may require restoring the sources.

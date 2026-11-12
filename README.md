@@ -88,7 +88,8 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/contacts` | Contacts | Live list with filters, export, bulk archive/update, duplicate merge, tags column, and create |
 | `/app/contacts/:contactId` | Contact detail | Overview, notes, tags, custom fields, company context, email health, edit, and delete |
 | `/app/imports` | Imports | CSV template, upload, mapping, duplicate modes, preview counts, progress, explained report, and 24-hour rollback |
-| `/app/*`    | App areas           | Replies, campaigns, pipeline, lists, mailboxes, settings, admin, and the rest of `APP_AREAS` |
+| `/app/lists` | Lists & segments | Live static lists, browser-side AND/OR segments with a live count preview, dev-only tags, and a campaign-audience handoff |
+| `/app/*`    | App areas           | Replies, campaigns, pipeline, mailboxes, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
 | `/privacy`  | Privacy Policy      | Static legal copy                                            |
@@ -126,6 +127,7 @@ src/
       companies/     CompaniesPage, CompanyDetailPage, CompanyFormModal + companies.css
       contacts/      ContactsPage, ContactDetailPage, ContactFormModal, CompanyPicker, BulkUpdateModal, MergeDuplicatesModal + contacts.css
       imports/       ImportsPage + imports.css (CSV upload, mapping, duplicate modes, report, rollback)
+      lists/         ListsPage, SegmentBuilder, ListDetailView, TagManager, ListFormModal, ContactSelectionModal + lists.css
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -335,6 +337,37 @@ explains that the server still holds the original address until the endpoint shi
 date formatting. `src/lib/contactBulk.js` owns filtered export, injection-safe CSV cells, sequential
 bulk patching, duplicate grouping, merge planning, and merge execution. `CompanyPicker` and the
 company filters share `/companies` sampling.
+
+### Lists & segments
+
+`/app/lists` has three tabs — static lists, segments, and tags — plus a campaign-audience handoff:
+
+- **Static lists** are live `/lists` API records: create with a name and optional description, a
+  detail view with paged members, an add-contacts picker (the API skips contacts already in the list),
+  per-row remove, and delete with a confirm dialog. The API has no rename/update route, so name and
+  description are fixed after creation and the header says so. Server audit entries cover
+  `list.created`, `list.contacts_added`, and `list.deleted`; member removal is not audited in this
+  build.
+- **Segments** have no `/segments` endpoint in this build (the table exists but no router exposes it),
+  so they are stored per browser in `reyvo.segments.v1`. The builder combines rule groups with AND and
+  offers a "match any group" OR toggle. Fields cover status, company, title, source, created dates,
+  tag presence, and list membership (`in_list`, hydrated from list members). The estimated count is
+  computed client-side over a 5,000-contact scan (2,000 members per list lookup), labelled
+  "estimated", and saved segments are capped at 50. Saved rows support edit, duplicate, delete, and
+  "Use" for the campaign handoff.
+- **Tags** stay dev-only in `reyvo.contactTags.v1`, consistent with the contact tags: aggregate cards,
+  bulk apply to selected contacts (8 tags per contact, 24 characters), rename, delete, and search. A
+  storage note marks the tab as development-only.
+- **Campaign handoff** — "Use in campaign" on a list or segment writes the pending audience to
+  `reyvo.campaignAudience.v1` via `src/lib/audience.js` and shows a persistent "Next campaign
+  audience" card. The T21 campaign wizard will read this contract; server-side segment selection is
+  not viable in this build because campaign resolution only understands `status` and `company_id`.
+- **Permissions** — owner/admin write lists, segments, and tags; members get read-only notices and no
+  write affordances, but "Use in campaign" stays available to any role that can view the tab.
+
+`src/lib/lists.js` owns the live list API, `src/lib/segments.js` owns segment definitions, storage,
+evaluation, and the contact snapshot, `src/lib/tags.js` owns tag aggregation and bulk apply, and
+`src/lib/audience.js` owns the campaign-audience contract.
 
 ### Imports
 

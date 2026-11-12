@@ -1161,6 +1161,16 @@
     grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 24px 30px;
   }
 
+  .lists__rule-field {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .lists__rule-operator {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
   .lists__rule-value {
     grid-column: 2 / span 2;
     grid-row: 2;
@@ -1186,6 +1196,10 @@
     flex-direction: column;
   }
 
+  .lists__detail-copy {
+    flex: 0 0 auto;
+  }
+
   .lists__detail-actions {
     width: 100%;
   }
@@ -1208,6 +1222,7 @@
 
   .lists__rule-field {
     grid-column: 2 / span 3;
+    grid-row: 1;
   }
 
   .lists__rule-operator {

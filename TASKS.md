@@ -371,9 +371,50 @@ marketing site and auth entry pages already exist and are not repeated here.
     `contact.updated` / `contact.deleted` and reflected in the list; export is reflected in the list but
     cannot be audited in this API build.
 
-- [ ] **T16 — Lists, tags, and segment builder** · L · deps: T12 · §5.2.4
+- [x] **T16 — Lists, tags, and segment builder** · L · deps: T12 · §5.2.4
   - Static lists, tags, AND/OR segment rules, operators, live count preview, save/edit.
   - Done when: a saved segment previews its count and can be selected by the campaign wizard.
+  - `/app/lists` has three tabs. **Static lists** use the live `/lists` API (`src/lib/lists.js`):
+    create with name + optional description, detail view with paged members
+    (`GET /lists/{id}/contacts`, `limit ≤ 100`), add contacts through a picker that skips members the
+    API already contains, per-row remove (`DELETE /lists/{id}/contacts/{contact_id}`), and delete list
+    with a confirm dialog. The API has no rename/update route, so name and description are fixed after
+    creation and the header is labelled read-only. Server audit entries: `list.created`,
+    `list.contacts_added`, `list.deleted`; member removal is not audited in this build.
+  - **Segments** are stored browser-side in `reyvo.segments.v1` (`src/lib/segments.js`) because this
+    API build has no `/segments` route (the `segments` table exists but no router exposes it). The
+    builder supports AND of rule groups with an OR ("match any group") toggle; fields cover status,
+    company, title, source, created date ranges, tag presence, and list membership (`in_list`, hydrated
+    from `GET /lists/{id}/contacts` for up to 2,000 members per list). The estimated count is computed
+    client-side over a 5,000-contact scan and labelled "estimated"; saved segments are capped at 50.
+    Rows offer edit, duplicate, delete, and "Use" for the campaign handoff.
+  - **Tags** remain dev-only in `reyvo.contactTags.v1` (consistent with T12): aggregate cards per tag,
+    apply to selected contacts (max 8 tags per contact, 24 chars), rename, delete with confirm, and
+    search. A storage note marks the tab as development-only.
+  - **Campaign handoff** (`src/lib/audience.js`): "Use in campaign" on a list or segment writes the
+    pending audience to `reyvo.campaignAudience.v1` (`{ key, type: 'list'|'segment', id, name, count,
+    typeLabel, savedAt }`) and shows a persistent "Next campaign audience" card with Open campaigns /
+    Clear. The campaign wizard (T21) does not exist yet, so full wizard selection lands with T21; the
+    pending-audience contract is the verified handoff. Server-side segment selection is not viable in
+    this build because campaign resolution only understands `status` and `company_id`.
+  - Permissions mirror T12: owner/admin write lists, segments, and tags; members are read-only (notice
+    banner, Read-only badge, no create/remove/delete controls; "Use in campaign" stays available).
+  - Verified live as owner: create → toast + deep link `?tab=lists&list=<id>`; add all 4 demo contacts
+    (duplicate skip, company names render); "Use in campaign" wrote the list audience; segment builder
+    live preview moved 0 → 3 on `email contains northwind`, → 4 with an OR group and again with an
+    `in_list` rule after membership hydration; save requires a name; saved segment rendered with
+    definition summary + estimated count; segment "Use" replaced the pending audience with
+    `Saved segment · 4 contacts`; tags applied to two contacts, renamed, then deleted (store emptied).
+    As a temporary `member`: read-only banners on all tabs, no Remove/Delete/Apply/New controls.
+    Owner removal was tested: toast, count 4 → 3, pagination updated.
+  - Checked at 375 / 768 / 1024 / 1440 px with a headless-Chrome harness: no page-level horizontal
+    overflow on any page state. Two mobile regressions found and fixed in `lists.css`: the detail
+    header's `flex: 1 1 340px` forced a ~340 px-tall copy block in the column layout (now `flex: 0 0
+    auto` at ≤768 px), and auto grid placement pushed the segment field select below its operator
+    (field/operator now have explicit grid rows at ≤860 px and ≤640 px). No console errors on the page.
+  - Done when: a saved segment previews its count and can be selected by the campaign wizard. The
+    preview is live and verified; wizard selection is delivered through the verified
+    `reyvo.campaignAudience.v1` contract and completes when the T21 wizard consumes it.
 
 - [ ] **T17 — Suppression management** · M · deps: T12 · §5.2.5
   - Tenant suppression list, reasons, manual block, remove with owner override rules.
@@ -398,6 +439,9 @@ marketing site and auth entry pages already exist and are not repeated here.
 - [ ] **T21 — Campaign wizard: audience and mailboxes** · M · deps: T16, T18 · §5.4.2
   - Wizard shell, list/segment audience, included/excluded counts, healthy-inbox selection.
   - Done when: the estimated send count updates with exclusions and mailbox caps.
+  - Audience selection reads the pending audience contract written by T16
+    (`reyvo.campaignAudience.v1`, `src/lib/audience.js`): a list id (count from the API) or a saved
+    segment definition (evaluated client-side over the contact snapshot).
 
 - [ ] **T22 — Sequence editor and merge fields** · L · deps: T21 · §5.4.3, §5.4.4
   - 1–8 steps, business-day delays, subject/body, rich text + plain-text fallback, merge-field picker.
