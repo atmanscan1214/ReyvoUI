@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   ArrowRight, Building, CheckCircle, Clock, Database, Inbox, MailCheck, Send,
 } from '../../components/icons'
-import { Badge, Button, ErrorPanel, TextField } from '../../components/ui'
+import { Badge, Button, ErrorPanel } from '../../components/ui'
+import { TextField } from '../../components/Field'
 import { useSession } from '../../lib/session'
 import { usePageTitle } from '../../lib/usePageTitle'
 import { useSetupData } from '../../lib/onboarding'
@@ -203,11 +204,20 @@ export function AddressPage() {
           {progress.readyToSend ? <CheckCircle size={22} /> : progress.readyToImport ? <Database size={22} /> : <Refresh size={22} />}
         </span>
         <div className="welcome__readiness-copy">
-          {progress.readyToSend
-            ? { title: 'You're ready to send.', body: 'All five steps are complete. Your inbox is connected, your audience is imported, and a campaign is ready to go.', href: '/app', action: 'Open your workspace' }
-            : progress.readyToImport
-              ? { title: "You're ready to import contacts.", body: 'Your email is verified and your mailing address is on file. Next, connect a mailbox and bring in your market.', href: '/app/imports', action: 'Import contacts' }
-              : { title: 'Finish your setup.', body: 'We're still checking which steps are already complete. Your checklist below updates as each request lands.', href: '#setup-heading', action: 'View checklist' }}
+          <h2 id="readiness-heading">
+            {progress.readyToSend
+              ? "You're ready to send."
+              : progress.readyToImport
+                ? "You're ready to import contacts."
+                : 'Finish your setup.'}
+          </h2>
+          <p>
+            {progress.readyToSend
+              ? 'All five steps are complete. Your inbox is connected, your audience is imported, and a campaign is ready to go.'
+              : progress.readyToImport
+                ? 'Your email is verified and your mailing address is on file. Next, connect a mailbox and bring in your market.'
+                : "We're still checking which steps are already complete. Your checklist below updates as each request lands."}
+          </p>
         </div>
         <Link className="btn btn--primary welcome__readiness-action" to={progress.readyToSend ? '/app' : progress.readyToImport ? '/app/imports' : '#setup-heading'}>
           {progress.readyToSend ? 'Open your workspace' : progress.readyToImport ? 'Import contacts' : 'View checklist'}
@@ -268,7 +278,7 @@ export function AddressPage() {
                       <ArrowRight size={14} />
                     </Link>
                     {step.id === 'mailing-address' && hasPhysicalAddress(street ? { street, city, postalCode: postalCode, country } : null) ? (
-                      <span className="welcome__step-meta">{formatAddress({ street: street || '', city || '', postalCode: postalCode || '', country: country || 'US' })}</span>
+                      <span className="welcome__step-meta">{formatAddress({ street: street || '', city: city || '', postalCode: postalCode || '', country: country || 'US' })}</span>
                     ) : null}
                   </div>
                 </div>

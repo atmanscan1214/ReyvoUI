@@ -279,7 +279,7 @@ export function ContactsPage() {
             ) : null}
           </>
         }
-        actions{
+        actions={
           status !== 'denied' ? (
             <>
               <Button

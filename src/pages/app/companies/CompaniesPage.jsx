@@ -223,7 +223,7 @@ export function CompaniesPage() {
             ) : null}
           </>
         }
-        actions{
+        actions={
           canWrite && status !== 'denied' ? (
             <Button variant="primary" leadingIcon={Plus} onClick={() => setFormOpen(true)}>
               New company
