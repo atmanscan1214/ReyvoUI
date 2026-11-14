@@ -28,6 +28,7 @@ import { ContactDetailPage } from './pages/app/contacts/ContactDetailPage'
 import { ImportsPage } from './pages/app/imports/ImportsPage'
 import { ListsPage } from './pages/app/lists/ListsPage'
 import { SuppressionsPage } from './pages/app/suppressions/SuppressionsPage'
+import { MailboxesPage } from './pages/app/mailboxes/MailboxesPage'
 import { SessionProvider } from './lib/session'
 import './components/ui/ui.css'
 
@@ -40,7 +41,8 @@ const AREA_ROUTES = Object.entries(APP_AREAS).filter(
     key !== 'contacts' &&
     key !== 'lists' &&
     key !== 'imports' &&
-    key !== 'suppressions',
+    key !== 'suppressions' &&
+    key !== 'mailboxes',
 )
 
 export default function App() {
@@ -103,6 +105,7 @@ export default function App() {
             <Route path="imports" element={<ImportsPage />} />
             <Route path="lists" element={<ListsPage />} />
             <Route path="suppressions" element={<SuppressionsPage />} />
+            <Route path="mailboxes" element={<MailboxesPage />} />
             {AREA_ROUTES.map(([key, area]) => (
               <Route
                 key={key}

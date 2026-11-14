@@ -475,6 +475,25 @@ Behavior notes from live verification:
 `status`: `connected`, `needs_reauth`, `degraded`, `error`, `disconnected`.
 `provider`: `google`, `microsoft`.
 
+Behavior notes (T18 slice):
+
+- `GET /email-accounts` returns a plain (non-paged) array ordered by `created_at`. The route has
+  principal auth but no role check, so member write access is UI policy (read-only there).
+- `POST .../oauth/{provider}/start` returns `authorization_url` + `state`; without provider
+  credentials configured it raises 503, which the UI maps to a friendly "not configured" state
+  rather than a raw message.
+- The OAuth callback is a backend URL (`app_public_url`-adjacent), so the UI opens the consent
+  screen in a popup and polls the accounts list (2.5 s interval, 3 min cap); a new account id
+  means success. A popup closed without a new account is treated as "not completed" (info toast,
+  nothing changed).
+- Health states are maintained by the backend worker (checks every 15 minutes per design
+  §5.3.4); `last_health_check_at` and `last_error` drive the card banners.
+- The reconnect flow updates the existing record by tenant + email (no duplicate rows), and
+  disconnect sets status `disconnected` and clears tokens; audit actions are
+  `email_account.connected` / `email_account.updated` / `email_account.disconnected`.
+- T18 covers the list and OAuth start only. From name, reply-to, caps, test send, and disconnect
+  are T19 (inbox detail) work.
+
 ### Campaigns
 
 | Endpoint | Purpose |

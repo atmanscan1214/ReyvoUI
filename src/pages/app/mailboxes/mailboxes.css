@@ -1,0 +1,257 @@
+/* ---------------------------------------------------------------------------
+   Mailboxes (T18)
+   --------------------------------------------------------------------------- */
+
+.mail-page {
+  min-width: 0;
+}
+
+/* Policy explainer --------------------------------------------------------- */
+
+.mail__policy {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.mail__policy svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.mail__policy strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Read-only ---------------------------------------------------------------- */
+
+.mail__read-only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Account cards ------------------------------------------------------------ */
+
+.mail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.mail__card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 18px;
+}
+
+.mail__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mail__provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper-deep);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.mail__email {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.mail__from-name {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.mail__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.mail__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 11px;
+  border: 1px solid #f3c4c1;
+  border-radius: var(--radius-sm);
+  background: #fdeceb;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.mail__error svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.mail__caps {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.mail__card-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+/* Connect modal ------------------------------------------------------------ */
+
+.mail__providers {
+  display: grid;
+  gap: 14px;
+}
+
+.mail__provider-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.mail__provider-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mail__provider-copy strong {
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.mail__provider-copy p {
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.mail__reconnect-note {
+  padding: 8px 10px;
+  border: 1px solid #f3c4c1;
+  border-radius: var(--radius-sm);
+  background: #fdeceb;
+  color: var(--danger) !important;
+  font-weight: 500;
+}
+
+.mail__scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mail__scopes li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.mail__scopes svg {
+  color: var(--lime-strong);
+}
+
+.mail__modal-hint {
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.mail__error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #f3c4c1;
+  border-radius: var(--radius-sm);
+  background: #fdeceb;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.mail__error-banner svg {
+  flex-shrink: 0;
+}
+
+.mail__waiting {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 26px 10px;
+  text-align: center;
+}
+
+.mail__waiting p {
+  max-width: 380px;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.mail__waiting-spinner {
+  animation: mail-spin 1.1s linear infinite;
+  color: var(--muted);
+}
+
+@keyframes mail-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive --------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .mail__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mail__provider-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mail__provider-card .btn {
+    justify-content: center;
+  }
+}

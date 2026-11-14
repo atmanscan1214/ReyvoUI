@@ -90,7 +90,8 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/imports` | Imports | CSV template, upload, mapping, duplicate modes, preview counts, progress, explained report, and 24-hour rollback |
 | `/app/lists` | Lists & segments | Live static lists, browser-side AND/OR segments with a live count preview, dev-only tags, and a campaign-audience handoff |
 | `/app/suppressions` | Suppressions | Live suppression list with reason filter, manual blocking, override rules, and import exclusion |
-| `/app/*`    | App areas           | Replies, campaigns, pipeline, mailboxes, settings, admin, and the rest of `APP_AREAS` |
+| `/app/mailboxes` | Mailboxes | Live mailbox list with health badges, reconnect prompts, and the OAuth connect flow |
+| `/app/*`    | App areas           | Replies, campaigns, pipeline, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
 | `/privacy`  | Privacy Policy      | Static legal copy                                            |
@@ -130,6 +131,7 @@ src/
       imports/       ImportsPage + imports.css (CSV upload, mapping, duplicate modes, report, rollback)
       lists/         ListsPage, SegmentBuilder, ListDetailView, TagManager, ListFormModal, ContactSelectionModal + lists.css
       suppressions/  SuppressionsPage + suppressions.css (block modal, override rules, reason filter)
+      mailboxes/     MailboxesPage + mailboxes.css (health cards, connect modal, OAuth popup flow)
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -396,6 +398,33 @@ evaluation, and the contact snapshot, `src/lib/tags.js` owns tag aggregation and
   banner, and no write controls. The API has no RBAC on this route, so this is UI policy.
 
 `src/lib/suppressions.js` owns the suppression API adapter, reason metadata, and override flags.
+
+### Mailboxes
+
+`/app/mailboxes` is built on the live `/email-accounts` API:
+
+- **Health list** — every account renders as a card with the provider chip, a tone-coded status
+  badge (`connected` success, `degraded` warning, `needs reauth`/`error` danger, `disconnected`
+  neutral), the address, last health check as relative time (or "No health check recorded yet"),
+  the `last_error` banner when present, and the daily/hourly caps with warm-up stage. The page
+  header shows connected and needs-attention counts.
+- **Reconnect prompts** — `needs_reauth`, `error`, and `disconnected` cards show a reconnect
+  button that opens the connect modal preset to that provider (an explicit Continue click starts
+  the flow, nothing auto-starts). Connected and degraded cards offer no action in T18.
+- **OAuth connect** — the modal lists Google and Microsoft providers with their scopes. Continue
+  calls `POST /oauth/{provider}/start`, opens the consent screen in a popup, and polls the
+  accounts list every 2.5 s (max 3 min) because the callback is a backend URL the UI cannot
+  intercept; a new account id means success. A popup closed without a new account shows an
+  info toast, and a 503 start response (provider OAuth app not configured on this API build)
+  maps to a friendly not-configured error. No mailbox passwords are ever collected.
+- **Permissions** — owner/admin write; members view the list with a Read-only badge, a notice
+  banner, and no connect/reconnect controls. The API has no RBAC on this route, so this is UI
+  policy.
+- **T19 boundary** — from name, reply-to, caps, warm-up configuration, test send, and disconnect
+  land with the inbox detail task; the cards currently display those fields read-only.
+
+`src/lib/emailAccounts.js` owns the email-accounts API adapter, provider metadata, and status
+tone mapping.
 
 ### Imports
 

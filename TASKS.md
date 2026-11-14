@@ -459,9 +459,15 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Inboxes
 
-- [ ] **T18 — Inbox list, health, and OAuth connect** · M · deps: T07 · §5.3
+- [x] **T18 — Inbox list, health, and OAuth connect** · M · deps: T07 · §5.3
   - Provider choice, OAuth start/callback states, health badges, last check, reconnect prompts.
   - Done when: connected, needs-reauth, degraded, and disconnected accounts all render correctly.
+  - Notes: verified all five health states via seeded rows (badge tones, last-check text,
+    `last_error` banners, reconnect prompts on needs_reauth/error/disconnected), the preset
+    reconnect modal, the 503 not-configured state, member read-only, and the popup consent flow
+    (opened + cancel detection; success path needs real provider credentials). Fixed a real bug:
+    `noopener` in the `window.open` features string returns null, so it was removed to keep the
+    polling handle. Seeded rows cleaned up afterwards.
 
 - [ ] **T19 — Inbox detail and configuration** · M · deps: T18 · §5.3.5
   - From name, reply-to, signature, timezone, daily cap, warm-up, test send, disconnect.
