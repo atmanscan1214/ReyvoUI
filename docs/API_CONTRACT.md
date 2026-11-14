@@ -446,6 +446,21 @@ Behavior notes from live verification:
 
 Reasons: `unsubscribe`, `hard_bounce`, `complaint`, `manual`, `legal`.
 
+Behavior notes from live verification:
+
+- `GET /suppressions` matches `tenant_id = current OR tenant_id IS NULL`, so platform (global) rows
+  are included. `SuppressionRead` has no tenant flag, so the UI cannot tell them apart; the design
+  (D-07) would show platform blocks only as a generic "blocked by platform" reason, but this build
+  returns the raw reason.
+- `POST /suppressions` normalizes the email, returns 409 when it is already suppressed, flips a
+  matching contact to `unsubscribed`, and audits `suppression.created`.
+- `DELETE /suppressions/{id}` audits `suppression.removed`. The route has no server-side RBAC, so
+  owner/admin-only writes are UI policy.
+- Override rules (design §5.2.5, applied by reason): `complaint` and `legal` are non-overridable;
+  `unsubscribe`, `hard_bounce`, and `manual` can be removed by an owner or admin.
+- The import review step reads `GET /suppressions` (all pages, capped) to mark suppressed rows as
+  skipped before upload.
+
 ### Email accounts (mailboxes)
 
 | Endpoint | Purpose |
@@ -608,5 +623,9 @@ These are backend extension points per `DEVELOPER_GUIDE.md`; the UI must not imp
   `reyvo.segments.v1` and tags in `reyvo.contactTags.v1`, evaluated client-side, and hands the pending
   campaign audience to the wizard through `reyvo.campaignAudience.v1` because campaign resolution only
   understands `status` and `company_id` from `segment.definition`.
+- `SuppressionRead` has no tenant/platform flag even though the list query returns both tenant rows
+  and platform rows (`tenant_id IS NULL`). The UI applies the design's override rules by reason
+  (`complaint` and `legal` non-overridable) and cannot label a platform block as
+  "blocked by platform".
 - Sources under `ReyvoAPI/ReyvoApi/src/reyvo/*.py` were missing at capture time. The API was
   reachable from a running process, but restarting it may require restoring the sources.

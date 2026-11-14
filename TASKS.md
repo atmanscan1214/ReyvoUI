@@ -416,9 +416,46 @@ marketing site and auth entry pages already exist and are not repeated here.
     preview is live and verified; wizard selection is delivered through the verified
     `reyvo.campaignAudience.v1` contract and completes when the T21 wizard consumes it.
 
-- [ ] **T17 — Suppression management** · M · deps: T12 · §5.2.5
+- [x] **T17 — Suppression management** · M · deps: T12 · §5.2.5
   - Tenant suppression list, reasons, manual block, remove with owner override rules.
   - Done when: suppressed contacts are visibly excluded at import and campaign audience steps.
+  - `/app/suppressions` is built on the live `/suppressions` API (`src/lib/suppressions.js`): a paged
+    read (25 per page) with a reason filter synced to the URL (`?reason=&page=`), a Block-address modal
+    (email + optional note, client validation, the 409 duplicate mapped to an inline banner), and
+    per-row Remove behind a confirm dialog. `POST` always sends reason `manual` — unsubscribes,
+    bounces, and complaints arrive automatically from sends/replies/imports, so hand-entered ones
+    would be false compliance records. The modal states that a manual block marks a matching contact
+    `unsubscribed`.
+  - Override rules follow the design (§5.2.5) applied by reason, because `SuppressionRead` has no
+    tenant/platform flag: `complaint` and `legal` rows show a Locked label and never render Remove;
+    `unsubscribe`, `hard_bounce`, and `manual` rows are removable. The API's list query also returns
+    platform rows (`tenant_id IS NULL`), so a "legal" row may be a platform block; documented as a
+    limitation. The API has no RBAC on this route, so member read-only is UI policy, mirroring the
+    design's permission table: owner/admin write, members view only.
+  - A policy explainer card states that a send is blocked if the address is on the tenant list or the
+    platform list, and that every removal is audited. Server audits verified live:
+    `suppression.created` and `suppression.removed` appear in `/tenants/current/audit-logs`.
+  - Verified live as owner: seeded 4 blocks via the API (one per reason class); table rendered email,
+    tone-coded reason badges, prettified source, note, and blocked date; Block modal validation
+    (empty, invalid format) and 409 duplicate handling; blocking a new address → toast, count 4 → 5,
+    row present; Remove on a manual row → confirm dialog, toast, row gone, count back to 4; reason
+    filter `?reason=complaint` → single row + "1 blocked with this reason" badge; empty state with
+    Block action after cleanup. As a temporary `member`: Read-only badge, no Block/Remove controls,
+    read-only banner.
+  - Import exclusion (done-when, import half) verified live: with one seeded suppression, a 2-row CSV
+    review shows a "Suppressed · Never uploaded" count card, a "Suppressed addresses found" alert
+    naming the row and reason, a Suppressed row-preview chip, the row marked Suppressed, and the CTA
+    counting only 1 importable contact. The campaign-audience half lands with the T21 wizard; the
+    wizard will show suppression exclusions and the server already blocks sends to suppressed
+    addresses.
+  - Checked at 375 / 768 / 1024 / 1440 px with a headless-Chrome harness: no page-level horizontal
+    overflow. One tablet regression found and fixed in `suppressions.css`: the nowrap note cell drove
+    the auto table's preferred width, pushing the action column behind the internal scroll at 1024 px
+    (note capped at 170 px and cell padding tightened to 11 px below 1280 px; verified the table then
+    fits exactly). No console errors beyond the expected 409 resource log.
+  - Done when: suppressed contacts are visibly excluded at import and campaign audience steps. The
+    import half is verified live; the campaign half completes when the T21 wizard consumes the
+    suppression list for its included/excluded counts.
 
 ## Inboxes
 

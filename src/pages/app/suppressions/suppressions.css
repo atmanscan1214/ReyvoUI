@@ -1,0 +1,153 @@
+/* ---------------------------------------------------------------------------
+   Suppressions (T17)
+   --------------------------------------------------------------------------- */
+
+.sup-page {
+  min-width: 0;
+}
+
+/* Policy explainer --------------------------------------------------------- */
+
+.sup__policy {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.sup__policy svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.sup__policy em {
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* Table cells -------------------------------------------------------------- */
+
+.sup__email {
+  font-weight: 600;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.sup__muted {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.sup__note {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* The nowrap note drives the auto table's preferred width; shrink it before
+   the action column has to scroll out of view. */
+@media (max-width: 1280px) {
+  .sup__note {
+    max-width: 170px;
+  }
+
+  .sup-page .ui-table th,
+  .sup-page .ui-table td {
+    padding-left: 11px;
+    padding-right: 11px;
+  }
+}
+
+.sup__locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.sup__row-action {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--danger);
+  cursor: pointer;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.sup__row-action:hover:not(:disabled) {
+  background: #fdeceb;
+  border-color: #f3c4c1;
+}
+
+.sup__row-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Block-address modal ------------------------------------------------------ */
+
+.sup__form {
+  display: grid;
+  gap: 16px;
+}
+
+.sup__form-hint {
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.sup__error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #f3c4c1;
+  border-radius: var(--radius-sm);
+  background: #fdeceb;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+/* Read-only ---------------------------------------------------------------- */
+
+.sup__read-only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Responsive --------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .sup__policy {
+    flex-wrap: wrap;
+  }
+
+  .sup__note {
+    max-width: 140px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sup__note {
+    max-width: 120px;
+  }
+}

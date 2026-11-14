@@ -89,6 +89,7 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/contacts/:contactId` | Contact detail | Overview, notes, tags, custom fields, company context, email health, edit, and delete |
 | `/app/imports` | Imports | CSV template, upload, mapping, duplicate modes, preview counts, progress, explained report, and 24-hour rollback |
 | `/app/lists` | Lists & segments | Live static lists, browser-side AND/OR segments with a live count preview, dev-only tags, and a campaign-audience handoff |
+| `/app/suppressions` | Suppressions | Live suppression list with reason filter, manual blocking, override rules, and import exclusion |
 | `/app/*`    | App areas           | Replies, campaigns, pipeline, mailboxes, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
@@ -128,6 +129,7 @@ src/
       contacts/      ContactsPage, ContactDetailPage, ContactFormModal, CompanyPicker, BulkUpdateModal, MergeDuplicatesModal + contacts.css
       imports/       ImportsPage + imports.css (CSV upload, mapping, duplicate modes, report, rollback)
       lists/         ListsPage, SegmentBuilder, ListDetailView, TagManager, ListFormModal, ContactSelectionModal + lists.css
+      suppressions/  SuppressionsPage + suppressions.css (block modal, override rules, reason filter)
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -368,6 +370,32 @@ company filters share `/companies` sampling.
 `src/lib/lists.js` owns the live list API, `src/lib/segments.js` owns segment definitions, storage,
 evaluation, and the contact snapshot, `src/lib/tags.js` owns tag aggregation and bulk apply, and
 `src/lib/audience.js` owns the campaign-audience contract.
+
+### Suppressions
+
+`/app/suppressions` is built on the live `/suppressions` API:
+
+- **List** — paged read (25 per page) with a reason filter and page synced to the URL. Rows show the
+  address, a tone-coded reason badge, prettified source, optional note, and the blocked date. A
+  policy card explains that a send is blocked when the address is on the tenant list or the
+  platform-wide list.
+- **Block an address** — owner/admin modal with email validation, an optional note, and the 409
+  duplicate mapped to an inline banner. The reason is always `manual`: unsubscribes, bounces, and
+  complaints arrive automatically from sends, replies, and imports, so hand-entering them would
+  create false compliance records. A manual block marks a matching contact `unsubscribed` (the
+  server does this).
+- **Override rules** — `complaint` and `legal` rows are locked (no Remove control); `unsubscribe`,
+  `hard_bounce`, and `manual` rows can be removed by an owner or admin with a confirm dialog, and
+  every removal is audited server-side. The read model cannot distinguish tenant rows from platform
+  rows, so the rules are applied by reason.
+- **Import exclusion** — the import review step (T14) reads the suppression list and visibly marks
+  suppressed rows as "Suppressed · never uploaded", both in the counts and per row. The campaign
+  wizard (T21) will show the exclusions in its audience counts; the server already blocks sends to
+  suppressed addresses.
+- **Permissions** — owner/admin write; members view everything with a Read-only badge, a notice
+  banner, and no write controls. The API has no RBAC on this route, so this is UI policy.
+
+`src/lib/suppressions.js` owns the suppression API adapter, reason metadata, and override flags.
 
 ### Imports
 
