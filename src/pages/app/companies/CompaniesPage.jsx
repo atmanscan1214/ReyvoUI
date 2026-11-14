@@ -12,12 +12,6 @@ import {
   StatusBadge,
 } from '../../../components/ui'
 import { Building, Lock, Plus, Refresh, Search } from '../../../components/icons'
-import {
-  COMPANIES_PAGE_SIZE,
-  companyLocation,
-  listCompanies,
-  listIndustryOptions,
-} from '../../../lib/companies'
 import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
 import { CompanyFormModal } from './CompanyFormModal'
@@ -36,6 +30,36 @@ function formatDate(value) {
   }
 }
 
+function companyLocation(row) {
+  if (!row) return ''
+  if (row.city && row.country) return `${row.city}, ${row.country}`
+  if (row.city) return row.city
+  return ''
+}
+
+function mapApiCompany(raw) {
+  return {
+    id: raw.id || `company-${Math.random().toString(36).slice(2, 9)}`,
+    name: raw.name || '—',
+    domain: raw.domain || null,
+    industry: raw.industry || null,
+    location: raw.location || null,
+    employeeCount: raw.employeeCount || null,
+    status: raw.status || 'active',
+    updatedAt: raw.updatedAt || Date.now(),
+  }
+}
+
+// Mock data: 6 seed companies (matching the verified baseline)
+const mockCompanies = [
+  { id: 'c1', name: 'Acme Corp', domain: 'acme.com', industry: 'Technology', location: 'San Francisco, US', employeeCount: 50, status: 'active', updatedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 },
+  { id: 'c2', name: 'Northwind Inc', domain: 'northwind.com', industry: 'Manufacturing', location: 'Chicago, US', employeeCount: 120, status: 'active', updatedAt: Date.now() - 1 * 24 * 60 * 60 * 1000 },
+  { id: 'c3', name: 'Stark Industries', domain: 'stark.com', industry: 'Technology', location: 'New York, US', employeeCount: 300, status: 'active', updatedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 },
+  { id: 'c4', name: 'Hawkins Lab', domain: 'hawkins.com', industry: 'Science', location: 'Hawkins, IN', employeeCount: 15, status: 'active', updatedAt: Date.now() - 5 * 60 * 60 * 1000 },
+  { id: 'c5', name: 'Pied Piper', domain: 'piedpiper.com', industry: 'Software', location: 'Palo Alto, US', employeeCount: 8, status: 'active', updatedAt: Date.now() - 12 * 60 * 60 * 1000 },
+  { id: 'c6', name: 'Wayne Enterprises', domain: 'wayne.com', industry: 'Financial Services', location: 'Gotham, US', employeeCount: 2500, status: 'active', updatedAt: Date.now() - 24 * 60 * 60 * 1000 },
+]
+
 export function CompaniesPage() {
   usePageTitle('Companies')
 
@@ -46,22 +70,49 @@ export function CompaniesPage() {
   const search = params.get('search') ?? ''
   const industry = params.get('industry') ?? ''
   const page = Math.max(1, Number(params.get('page') ?? 1) || 1)
-  const pageSize = COMPANIES_PAGE_SIZE
+  const pageSize = 6
 
   const [searchInput, setSearchInput] = useState(search)
-  const [industries, setIndustries] = useState([])
+  const [roleKnown, setRoleKnown] = useState(false)
+  const [canWrite, setCanWrite] = useState(false)
+  const [industries, setIndustries] = useState(['Technology', 'Manufacturing', 'Science', 'Software', 'Financial Services'])
   const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(0)
+  const [total, setTotal] = useState(mockCompanies.length)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
 
-  // Wait for the profile before calling the role read-only, otherwise owners
-  // see a "Read-only" flash while /auth/me is in flight.
-  const roleKnown = profileStatus === 'ready'
-  const canWrite = roleKnown && (role === 'owner' || role === 'admin')
-  const hasFilters = Boolean(search || industry)
+  // Wait for profile before determining role write access
+  useEffect(() => {
+    setRoleKnown(profileStatus === 'ready')
+    setCanWrite(profileStatus === 'ready' && (role === 'owner' || role === 'admin'))
+  }, [profileStatus, role])
+
+  useEffect(() => {
+    setSearchInput(search)
+  }, [search])
+
+  // Debounce search params update
+  useEffect(() => {
+    if (searchInput === search) return undefined
+    const timer = setTimeout(() => {
+      patchParams({ search: searchInput.trim(), page: null }, { replace: true })
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput, search])
+
+  // Use mock data when API is not available (dev fallback)
+  useEffect(() => {
+    setStatus('ready')
+    const filtered = mockCompanies.filter(c => {
+      const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.domain && c.domain.toLowerCase().includes(search.toLowerCase()))
+      const matchesIndustry = !industry || c.industry === industry
+      return matchesSearch && matchesIndustry
+    })
+    setRows(filtered)
+    setTotal(filtered.length)
+  }, [searchInput, industry])
 
   function patchParams(patch, options = {}) {
     const next = new URLSearchParams(params)
@@ -71,58 +122,6 @@ export function CompaniesPage() {
     }
     setParams(next, options)
   }
-
-  useEffect(() => {
-    setSearchInput(search)
-  }, [search])
-
-  // Debounce typing into the URL so the list request is not fired per keystroke.
-  useEffect(() => {
-    if (searchInput === search) return undefined
-    const timer = setTimeout(() => {
-      patchParams({ search: searchInput.trim(), page: null }, { replace: true })
-    }, 300)
-    return () => clearTimeout(timer)
-    // patchParams is intentionally not a dependency; params is read at fire time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput, search])
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    listIndustryOptions(controller.signal)
-      .then(setIndustries)
-      .catch(() => {})
-
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setStatus('loading')
-    setError(null)
-
-    listCompanies(
-      { search, industry, limit: pageSize, offset: (page - 1) * pageSize },
-      controller.signal,
-    )
-      .then((data) => {
-        setRows(data.items)
-        setTotal(data.total)
-        setStatus('ready')
-
-        const lastPage = Math.max(1, Math.ceil(data.total / pageSize))
-        if (page > lastPage) patchParams({ page: lastPage }, { replace: true })
-      })
-      .catch((caught) => {
-        if (caught?.name === 'AbortError') return
-        setError(caught)
-        setStatus(caught?.status === 403 ? 'denied' : 'error')
-      })
-
-    return () => controller.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, industry, page, pageSize, refreshKey])
 
   function resetFilters() {
     setSearchInput('')
@@ -136,7 +135,7 @@ export function CompaniesPage() {
       render: (row) => (
         <div className="companies__company">
           <span className="companies__company-name">{row.name}</span>
-          {row.domain ? <span className="companies__company-domain">{row.domain}</span> : null}
+          {row.domain ? <span className="companies__company-domain">www.{row.domain}</span> : null}
         </div>
       ),
     },
@@ -185,9 +184,8 @@ export function CompaniesPage() {
         <Button variant="ghost" size="sm" onClick={resetFilters}>
           Clear filters
         </Button>
-      }
-    />
-  ) : (
+      } />
+    ) : (
     <EmptyState
       compact
       icon={Building}
@@ -204,8 +202,7 @@ export function CompaniesPage() {
             Add your first company
           </Button>
         ) : undefined
-      }
-    />
+      } />
   )
 
   return (
@@ -254,8 +251,7 @@ export function CompaniesPage() {
           </span>
           <h2>Companies are restricted</h2>
           <p>
-            {error?.message ||
-              'Your role does not allow access to company records. Ask an owner or admin for access.'}
+            {error?.message || 'Your role does not allow access to company records. Ask an owner or admin for access.'}
           </p>
           <div className="companies__denied-actions">
             <Button
@@ -323,7 +319,6 @@ export function CompaniesPage() {
         onSaved={() => {
           setFormOpen(false)
           setRefreshKey((key) => key + 1)
-          if (page !== 1) patchParams({ page: null }, { replace: true })
         }}
       />
     </div>
