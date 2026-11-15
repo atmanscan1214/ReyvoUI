@@ -23,6 +23,7 @@ import {
   OAUTH_PROVIDERS,
   accountStatusMeta,
   listEmailAccounts,
+  providerLabel,
   startOAuth,
 } from '../../../lib/emailAccounts'
 import './mailboxes.css'
@@ -229,7 +230,7 @@ function AccountCard({ account, canWrite, onReconnect }) {
       <header className="mail__card-head">
         <span className="mail__provider" title={meta.description ?? undefined}>
           <Mail size={15} aria-hidden="true" />
-          {account.provider === 'microsoft' ? 'Microsoft 365' : 'Google'}
+          {providerLabel(account.provider)}
         </span>
         <Badge tone={meta.tone} dot>
           {meta.label}
@@ -257,7 +258,7 @@ function AccountCard({ account, canWrite, onReconnect }) {
         {warmupDate ? ` (started ${warmupDate})` : ''}
       </p>
 
-      {canWrite && meta.reconnect ? (
+      {canWrite && meta.reconnect && account.provider !== 'smtp' ? (
         <footer className="mail__card-actions">
           <Button
             variant="outline"
@@ -265,7 +266,7 @@ function AccountCard({ account, canWrite, onReconnect }) {
             leadingIcon={Refresh}
             onClick={() => onReconnect?.()}
           >
-            Reconnect {account.provider === 'microsoft' ? 'Microsoft' : 'Google'} inbox
+            Reconnect {providerLabel(account.provider)} inbox
           </Button>
         </footer>
       ) : null}

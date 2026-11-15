@@ -81,6 +81,12 @@ export function accountStatusMeta(status) {
   )
 }
 
+export function providerLabel(provider) {
+  if (provider === 'microsoft') return 'Microsoft 365'
+  if (provider === 'smtp') return 'SMTP'
+  return 'Google'
+}
+
 export function normalizeEmailAccount(raw) {
   return {
     id: String(raw?.id ?? ''),
@@ -89,6 +95,7 @@ export function normalizeEmailAccount(raw) {
     displayName: raw?.display_name ?? null,
     fromName: raw?.from_name ?? null,
     replyTo: raw?.reply_to ?? null,
+    signatureHtml: raw?.signature_html ?? null,
     status: raw?.status ?? 'disconnected',
     dailyCap: Number(raw?.daily_cap ?? 0),
     hourlyCap: Number(raw?.hourly_cap ?? 0),
@@ -114,4 +121,31 @@ export async function startOAuth(provider, signal) {
     authorizationUrl: data?.authorization_url ?? '',
     state: data?.state ?? '',
   }
+}
+
+/**
+ * There is no GET-by-id endpoint; the list is small, so detail pages resolve
+ * the account from it.
+ */
+export async function getEmailAccount(id, signal) {
+  const items = await listEmailAccounts(signal)
+  const found = items.find((item) => item.id === String(id))
+  if (!found) {
+    throw Object.assign(new Error('Sending inbox not found.'), { status: 404 })
+  }
+  return found
+}
+
+export async function updateEmailAccount(id, payload, signal) {
+  const data = await api.patch(`/email-accounts/${encodeURIComponent(id)}`, payload, { signal })
+  return normalizeEmailAccount(data)
+}
+
+export async function disconnectEmailAccount(id, signal) {
+  const data = await api.delete(`/email-accounts/${encodeURIComponent(id)}`, { signal })
+  return normalizeEmailAccount(data)
+}
+
+export async function testEmailAccount(id, payload, signal) {
+  return api.post(`/email-accounts/${encodeURIComponent(id)}/test`, payload, { signal })
 }

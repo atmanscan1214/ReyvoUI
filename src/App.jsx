@@ -29,6 +29,7 @@ import { ImportsPage } from './pages/app/imports/ImportsPage'
 import { ListsPage } from './pages/app/lists/ListsPage'
 import { SuppressionsPage } from './pages/app/suppressions/SuppressionsPage'
 import { MailboxesPage } from './pages/app/mailboxes/MailboxesPage'
+import { MailboxDetailPage } from './pages/app/mailboxes/MailboxDetailPage'
 import { SessionProvider } from './lib/session'
 import './components/ui/ui.css'
 
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="lists" element={<ListsPage />} />
             <Route path="suppressions" element={<SuppressionsPage />} />
             <Route path="mailboxes" element={<MailboxesPage />} />
+            <Route path="mailboxes/:mailboxId" element={<MailboxDetailPage />} />
             {AREA_ROUTES.map(([key, area]) => (
               <Route
                 key={key}

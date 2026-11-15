@@ -473,9 +473,9 @@ Behavior notes from live verification:
 | `POST /email-accounts/{id}/test` | Send a test message |
 
 `status`: `connected`, `needs_reauth`, `degraded`, `error`, `disconnected`.
-`provider`: `google`, `microsoft`.
+`provider`: `google`, `microsoft`, `smtp`.
 
-Behavior notes (T18 slice):
+Behavior notes (T18/T19 slice):
 
 - `GET /email-accounts` returns a plain (non-paged) array ordered by `created_at`. The route has
   principal auth but no role check, so member write access is UI policy (read-only there).
@@ -491,8 +491,18 @@ Behavior notes (T18 slice):
 - The reconnect flow updates the existing record by tenant + email (no duplicate rows), and
   disconnect sets status `disconnected` and clears tokens; audit actions are
   `email_account.connected` / `email_account.updated` / `email_account.disconnected`.
-- T18 covers the list and OAuth start only. From name, reply-to, caps, test send, and disconnect
-  are T19 (inbox detail) work.
+- There is no GET-by-id endpoint; the detail page resolves the account from the list.
+- `PATCH /{id}` accepts `from_name`, `reply_to`, `signature_html` (string), `daily_cap` (1–2,000)
+  and `hourly_cap` (1–500); the UI validates the same bounds plus an hourly ≤ daily cross-check
+  and maps server 422 field errors inline. `signature_html` is not echoed back by the read model,
+  so the UI keeps the saved value locally for display.
+- `POST /{id}/test` requires a recipient in the body (`to_email`, optional `subject`, `message`
+  capped at 5,000 chars) unless `SMTP_TEST_RECIPIENT` is configured, then attempts a real send:
+  success returns `{ok, message}`; failures (for example an unusable token) return 503 and the
+  UI shows the provider message inline.
+- The newer API build also accepts `smtp` as a provider and exposes
+  `POST /email-accounts/smtp` registration. SMTP is a Phase 2 option per design §5.3.1, so the
+  UI labels `smtp` accounts but does not surface registration yet.
 
 ### Campaigns
 

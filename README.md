@@ -91,6 +91,7 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/lists` | Lists & segments | Live static lists, browser-side AND/OR segments with a live count preview, dev-only tags, and a campaign-audience handoff |
 | `/app/suppressions` | Suppressions | Live suppression list with reason filter, manual blocking, override rules, and import exclusion |
 | `/app/mailboxes` | Mailboxes | Live mailbox list with health badges, reconnect prompts, and the OAuth connect flow |
+| `/app/mailboxes/:mailboxId` | Mailbox detail | Sending identity, configuration modal with cap validation, warm-up panel, test send, and disconnect |
 | `/app/*`    | App areas           | Replies, campaigns, pipeline, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
@@ -131,7 +132,7 @@ src/
       imports/       ImportsPage + imports.css (CSV upload, mapping, duplicate modes, report, rollback)
       lists/         ListsPage, SegmentBuilder, ListDetailView, TagManager, ListFormModal, ContactSelectionModal + lists.css
       suppressions/  SuppressionsPage + suppressions.css (block modal, override rules, reason filter)
-      mailboxes/     MailboxesPage + mailboxes.css (health cards, connect modal, OAuth popup flow)
+      mailboxes/     MailboxesPage, MailboxDetailPage + mailboxes.css (health cards, connect modal, config form, test send)
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -420,11 +421,21 @@ evaluation, and the contact snapshot, `src/lib/tags.js` owns tag aggregation and
 - **Permissions** — owner/admin write; members view the list with a Read-only badge, a notice
   banner, and no connect/reconnect controls. The API has no RBAC on this route, so this is UI
   policy.
-- **T19 boundary** — from name, reply-to, caps, warm-up configuration, test send, and disconnect
-  land with the inbox detail task; the cards currently display those fields read-only.
+- **T19 boundary** — inbox detail (`/app/mailboxes/:mailboxId`) adds the sending-identity facts
+  (the from address is always the connected mailbox address per §5.3.5), a configuration modal
+  (from name, reply-to, HTML signature, daily cap 1–2,000, hourly cap 1–500 with an hourly ≤
+  daily cross-check and server field errors mapped inline), a warm-up/health panel (stage and
+  last check are worker-managed, read-only), a test-send dialog that posts a real recipient and
+  shows the API's success or failure feedback, and disconnect behind a confirm dialog. Timezone
+  is a workspace-level setting in this API build, so the page shows it as context rather than a
+  per-inbox field, and `signature_html` is accepted by PATCH but not returned on read — the page
+  keeps the saved value for display.
 
-`src/lib/emailAccounts.js` owns the email-accounts API adapter, provider metadata, and status
-tone mapping.
+`src/lib/emailAccounts.js` owns the email-accounts API adapter, provider metadata, status tone
+mapping, and the update/disconnect/test helpers. The API also accepts `smtp` as a provider and
+exposes `POST /email-accounts/smtp` registration plus `POST /{id}/test` with
+`{to_email, subject, message}`; the UI covers the OAuth providers and the test endpoint, while
+SMTP registration (a Phase 2 option per §5.3.1) is not surfaced yet.
 
 ### Imports
 

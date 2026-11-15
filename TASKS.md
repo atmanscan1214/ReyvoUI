@@ -469,9 +469,17 @@ marketing site and auth entry pages already exist and are not repeated here.
     `noopener` in the `window.open` features string returns null, so it was removed to keep the
     polling handle. Seeded rows cleaned up afterwards.
 
-- [ ] **T19 — Inbox detail and configuration** · M · deps: T18 · §5.3.5
+- [x] **T19 — Inbox detail and configuration** · M · deps: T18 · §5.3.5
   - From name, reply-to, signature, timezone, daily cap, warm-up, test send, disconnect.
   - Done when: caps are validated against plan/provider limits and test-send feedback is visible.
+  - Notes: detail page at `/app/mailboxes/:mailboxId` resolves the account from the list (no
+    GET-by-id). Config modal validates caps against the API bounds (daily 1–2,000, hourly 1–500,
+    hourly ≤ daily) and maps server 422 field errors; test send posts a recipient and shows the
+    API's success/failure feedback inline (verified the real "no usable token" 503 on a
+    token-less account); disconnect uses a confirm dialog and returns to the list. Warm-up stage
+    is read-only (worker-managed) and timezone is shown as workspace context — the API has no
+    per-inbox timezone yet. `signature_html` is accepted by PATCH but not returned by the read
+    model, so the saved value is displayed locally.
 
 ## Campaigns
 
