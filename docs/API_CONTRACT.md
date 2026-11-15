@@ -528,6 +528,27 @@ Behavior notes (T18/T19 slice):
 `status`: `draft`, `pending_approval`, `approved`, `active`, `paused`, `completed`, `archived`.
 `approval_status`: `pending`, `approved`, `rejected`.
 
+Behavior notes (T20 slice):
+
+- `GET /campaigns` returns the `Page` envelope (`items`, `total`, `limit`, `offset`) and accepts
+  `search` (max 255 chars) plus `status` (query alias for the status enum). The list is sorted
+  newest-first; the UI pages 20 rows at a time and keeps filters in the URL.
+- `POST /campaigns` requires `name` (2–255) and at least one `steps` entry (1–8, unique
+  `step_order`, `subject_template` 1–500, non-empty `body_html_template`). `audience_type` can be
+  `contacts` with an empty `contact_ids` array for a draft (the wizard fills it in later),
+  `timezone` defaults to `UTC`, `daily_cap` defaults to 200. Returns the campaign read model
+  including `steps`. Invalid step orders or unknown audience/mailbox ids raise 400.
+- Transitions are POST endpoints that return the updated read model; each enforces its source
+  state per §5.4.1, so calling them from the wrong state is a 409. `DELETE /campaigns/{id}`
+  returns 204 and is refused with 409 for `active` campaigns; deleting other states is accepted
+  but the UI only offers it for drafts.
+- There is no duplicate endpoint — the UI composes one from `GET /{id}` (which includes `steps`,
+  audience ids, caps, sending window) + `POST /campaigns`.
+- The T20 page owns only list-level actions: create, duplicate, submit, archive, delete. Approve,
+  reject, launch, pause, resume, preflight, preview, stats, and enrollments belong to the approval
+  workflow (T25) and the campaign detail (T26); the UI shows hints for those states instead.
+- No RBAC on this route in this build: member read-only is UI policy, same as the other list pages.
+
 ### Replies, tasks, pipeline
 
 | Endpoint | Purpose |

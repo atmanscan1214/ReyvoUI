@@ -92,7 +92,8 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/suppressions` | Suppressions | Live suppression list with reason filter, manual blocking, override rules, and import exclusion |
 | `/app/mailboxes` | Mailboxes | Live mailbox list with health badges, reconnect prompts, and the OAuth connect flow |
 | `/app/mailboxes/:mailboxId` | Mailbox detail | Sending identity, configuration modal with cap validation, warm-up panel, test send, and disconnect |
-| `/app/*`    | App areas           | Replies, campaigns, pipeline, settings, admin, and the rest of `APP_AREAS` |
+| `/app/campaigns` | Campaigns | Live campaign list with lifecycle badges, search/status filters, create, submit, duplicate, archive, and delete |
+| `/app/*`    | App areas           | Replies, pipeline, settings, admin, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
 | `/privacy`  | Privacy Policy      | Static legal copy                                            |
@@ -133,6 +134,7 @@ src/
       lists/         ListsPage, SegmentBuilder, ListDetailView, TagManager, ListFormModal, ContactSelectionModal + lists.css
       suppressions/  SuppressionsPage + suppressions.css (block modal, override rules, reason filter)
       mailboxes/     MailboxesPage, MailboxDetailPage + mailboxes.css (health cards, connect modal, config form, test send)
+      campaigns/     CampaignsPage + campaigns.css (lifecycle table, create modal, per-state actions)
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -436,6 +438,38 @@ mapping, and the update/disconnect/test helpers. The API also accepts `smtp` as 
 exposes `POST /email-accounts/smtp` registration plus `POST /{id}/test` with
 `{to_email, subject, message}`; the UI covers the OAuth providers and the test endpoint, while
 SMTP registration (a Phase 2 option per §5.3.1) is not surfaced yet.
+
+### Campaigns
+
+`/app/campaigns` is built on the live paged `/campaigns` API (`Page` envelope):
+
+- **Lifecycle table** — every row carries the status badge (`draft` neutral, `pending_approval`
+  warning, `approved` info, `active` success, `paused` warning, `completed` success, `archived`
+  neutral), the step count and timezone, audience summary, daily cap, and last update. Search and
+  the lifecycle filter sync to the URL (`?search=…&status=…`) with a debounced input and a
+  FilterBar reset.
+- **Clear next step per state** — each row shows exactly what can move it forward: draft rows
+  offer Submit for approval and Delete (behind a confirm dialog), pending/approved/active/paused
+  rows show a muted hint pointing at the approval workflow (T25) and the campaign detail (T26),
+  completed rows offer Archive and Duplicate, and archived rows offer Duplicate. Approving,
+  rejecting, launching, pausing, and resuming are not on this page by design — the lifecycle
+  table in §5.4.1 assigns them to the review workflow and detail page, which arrive later.
+- **Create** — the New-campaign modal seeds a draft with a name and a first step (subject +
+  body). Audience type, mailboxes, extra steps, and scheduling are the wizard's job (T21+), so
+  the modal keeps client-side validation for the three fields and maps server errors inline.
+  Create posts `audience_type: "contacts"` with empty ids — the API allows that for a draft.
+- **Duplicate** — the API has no duplicate endpoint, so the page composes one from
+  `GET /campaigns/{id}` + `POST /campaigns`, copying the name with " (copy)", steps, audience
+  ids, mailboxes, timezone, sending window, caps, and stop-on-reply. The copy lands as a draft.
+- **Archive and delete** — archive posts the transition behind a confirm dialog; delete (draft
+  rows only, per §5.4.1) removes the campaign, steps, and enrollments and also asks for
+  confirmation. Server refusals surface as error toasts.
+- **Permissions** — owner/admin write; members see a Read-only badge, a notice, and per-state
+  hints with no action buttons. The API has no RBAC on this route, so this is UI policy.
+
+`src/lib/campaigns.js` owns the campaign API adapter: the lifecycle status metadata (labels,
+tones, next-action verbs), normalization, list/create/get/duplicate/submit/archive/delete
+helpers, and the create payload shape.
 
 ### Imports
 

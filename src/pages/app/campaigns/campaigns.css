@@ -1,0 +1,180 @@
+/* ---------------------------------------------------------------------------
+   Campaigns (T20)
+   --------------------------------------------------------------------------- */
+
+.camp-page {
+  min-width: 0;
+}
+
+/* Policy explainer --------------------------------------------------------- */
+
+.camp__policy {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.camp__policy svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.camp__policy strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Read-only ---------------------------------------------------------------- */
+
+.camp__read-only {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Filter bar search field -------------------------------------------------- */
+
+.camp__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--muted);
+}
+
+.camp__search svg {
+  flex-shrink: 0;
+}
+
+.camp__search input {
+  flex: 1;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.82rem;
+  color: var(--ink);
+  outline: none;
+}
+
+.camp__search input::placeholder {
+  color: var(--muted);
+}
+
+/* Table -------------------------------------------------------------------- */
+
+.camp__name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.camp__name-text {
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 340px;
+}
+
+.camp__name-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.camp__muted {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.camp__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+}
+
+.camp__row-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.camp__row-action:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+  background: var(--paper-deep);
+}
+
+.camp__row-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.camp__row-action--danger {
+  color: var(--danger);
+  border-color: #f3c4c1;
+  background: #fdeceb;
+}
+
+.camp__row-action--danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: #f9dddb;
+}
+
+.camp__hint {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--muted);
+  text-align: right;
+  max-width: 220px;
+}
+
+/* Empty/error -------------------------------------------------------------- */
+
+.camp__error {
+  padding: 10px 12px;
+  border: 1px solid #f3c4c1;
+  border-radius: var(--radius-sm);
+  background: #fdeceb;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+/* Create modal ------------------------------------------------------------- */
+
+.camp-create {
+  display: grid;
+  gap: 16px;
+}
+
+/* Responsive --------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .camp__hint {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 768px) {
+  .camp__search {
+    min-width: 0;
+  }
+}

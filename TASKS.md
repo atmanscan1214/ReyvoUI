@@ -483,9 +483,19 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Campaigns
 
-- [ ] **T20 — Campaign list** · M · deps: T07 · §5.4.1
+- [x] **T20 — Campaign list** · M · deps: T07 · §5.4.1
   - Lifecycle badges, filters, empty state, create/duplicate/archive actions.
   - Done when: every lifecycle state has a clear next action.
+  - Notes: list page at `/app/campaigns` on the live paged `/campaigns` API with URL-synced
+    search (debounced) and lifecycle filter. Every lifecycle state shows a clear next step:
+    draft → Submit for approval + Delete (confirm dialog), pending/approved/active/paused →
+    muted hints pointing at the approval workflow (T25) and detail page (T26), completed →
+    Archive + Duplicate, archived → Duplicate. Create modal seeds a draft (name + first step;
+    audience/mailboxes/steps belong to the T21+ wizard) and maps server errors inline.
+    Duplicate composes GET detail + POST create (copying steps, audience ids, caps, window) —
+    the API has no dedicated duplicate endpoint. Verified: create, submit → pending, archive →
+    archived, duplicate → draft copy, delete → removed, filtered empty state, member read-only
+    (no actions, hints shown), 1440/1024/768/375 responsive with zero page overflow.
 
 - [ ] **T21 — Campaign wizard: audience and mailboxes** · M · deps: T16, T18 · §5.4.2
   - Wizard shell, list/segment audience, included/excluded counts, healthy-inbox selection.
