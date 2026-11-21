@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Ban,
   Copy,
@@ -8,7 +8,6 @@ import {
   Search,
   Send,
 } from '../../../components/icons'
-import { TextField, TextareaField } from '../../../components/Field'
 import {
   Badge,
   Button,
@@ -18,7 +17,6 @@ import {
   ErrorPanel,
   FilterBar,
   FilterSelect,
-  Modal,
   PageHeader,
   Pagination,
   StatusBadge,
@@ -28,12 +26,13 @@ import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
 import {
   CAMPAIGN_STATUSES,
+  approveCampaign,
   archiveCampaign,
   campaignStatusMeta,
-  createCampaign,
   deleteCampaign,
   duplicateCampaign,
   listCampaigns,
+  rejectCampaign,
   submitCampaign,
 } from '../../../lib/campaigns'
 import './campaigns.css'
@@ -88,10 +87,9 @@ export function CampaignsPage() {
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
-
-  const [createOpen, setCreateOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
   const [confirmTarget, setConfirmTarget] = useState(null) // { campaign, verb }
+  const [rejectNote, setRejectNote] = useState('')
 
   function updateParams(next) {
     const params = new URLSearchParams(searchParams)
@@ -149,12 +147,18 @@ export function CampaignsPage() {
     return () => controller.abort()
   }, [searchFilter, statusFilter, page, refreshKey])
 
-  async function runAction(campaign, verb) {
+  async function runAction(campaign, verb, note = '') {
     setBusyId(campaign.id)
     try {
       if (verb === 'submit') {
         await submitCampaign(campaign.id)
         toast.success(`${campaign.name} was submitted for approval.`)
+      } else if (verb === 'approve') {
+        await approveCampaign(campaign.id)
+        toast.success(`${campaign.name} was approved.`)
+      } else if (verb === 'reject') {
+        await rejectCampaign(campaign.id, { note: note.trim() })
+        toast.success(`${campaign.name} was returned to draft.`)
       } else if (verb === 'archive') {
         await archiveCampaign(campaign.id)
         toast.success(`${campaign.name} is now archived.`)
@@ -171,6 +175,7 @@ export function CampaignsPage() {
     } finally {
       setBusyId(null)
       setConfirmTarget(null)
+      setRejectNote('')
     }
   }
 
@@ -185,9 +190,9 @@ export function CampaignsPage() {
       header: 'Campaign',
       render: (row) => (
         <div className="camp__name">
-          <span className="camp__name-text" title={row.name}>
+          <Link className="camp__name-link" to={`/app/campaigns/${row.id}`} title={row.name}>
             {row.name}
-          </span>
+          </Link>
           <span className="camp__name-meta">
             {row.steps.length} step{row.steps.length === 1 ? '' : 's'} · {row.timezone}
           </span>
@@ -237,9 +242,10 @@ export function CampaignsPage() {
         }
         actions={
           canWrite && !filtered ? (
-            <Button variant="primary" size="sm" leadingIcon={Plus} onClick={() => setCreateOpen(true)}>
+            <Link className="btn btn--primary btn--sm" to="/app/campaigns/new">
+              <Plus size={15} aria-hidden="true" />
               New campaign
-            </Button>
+            </Link>
           ) : undefined
         }
       />
@@ -261,9 +267,10 @@ export function CampaignsPage() {
         }
         actions={
           canWrite ? (
-            <Button variant="primary" leadingIcon={Plus} onClick={() => setCreateOpen(true)}>
+            <Link className="btn btn--primary" to="/app/campaigns/new">
+              <Plus size={17} aria-hidden="true" />
               New campaign
-            </Button>
+            </Link>
           ) : null
         }
       />
@@ -340,36 +347,51 @@ export function CampaignsPage() {
         </>
       )}
 
-      {canWrite ? (
-        <CreateCampaignModal
-          open={createOpen}
-          onClose={() => setCreateOpen(false)}
-          onCreated={(campaign) => {
-            setCreateOpen(false)
-            toast.success(`${campaign.name} was created as a draft.`)
-            setRefreshKey((key) => key + 1)
-          }}
-        />
-      ) : null}
-
       {confirmTarget ? (
-        <ConfirmDialog
-          open
-          title={
-            confirmTarget.verb === 'delete'
-              ? `Delete "${confirmTarget.campaign.name}"?`
-              : `Archive "${confirmTarget.campaign.name}"?`
-          }
-          description={
-            confirmTarget.verb === 'delete'
-              ? 'The campaign, its steps, and its enrollments are removed permanently.'
-              : 'The campaign becomes read-only history. Duplicating it later still works.'
-          }
-          confirmLabel={confirmTarget.verb === 'delete' ? 'Delete campaign' : 'Archive campaign'}
-          loading={busyId === confirmTarget.campaign.id}
-          onConfirm={() => runAction(confirmTarget.campaign, confirmTarget.verb)}
-          onCancel={() => setConfirmTarget(null)}
-        />
+        confirmTarget.verb === 'reject' ? (
+          <ConfirmDialog
+            open
+            title={`Reject "${confirmTarget.campaign.name}"?`}
+            description="Return it to draft with a note that explains why it needs revision."
+            confirmLabel="Reject and return to draft"
+            loading={busyId === confirmTarget.campaign.id}
+            onConfirm={() => runAction(confirmTarget.campaign, confirmTarget.verb, rejectNote)}
+            onCancel={() => {
+              setConfirmTarget(null)
+              setRejectNote('')
+            }}
+          >
+            <label className="camp__reject-label" htmlFor="campaign-reject-note">
+              Reason for revision
+            </label>
+            <textarea
+              id="campaign-reject-note"
+              className="camp__reject-note"
+              rows={4}
+              value={rejectNote}
+              onChange={(event) => setRejectNote(event.target.value)}
+              placeholder="Example: missing legal review for the final sequence."
+            />
+          </ConfirmDialog>
+        ) : (
+          <ConfirmDialog
+            open
+            title={
+              confirmTarget.verb === 'delete'
+                ? `Delete "${confirmTarget.campaign.name}"?`
+                : `Archive "${confirmTarget.campaign.name}"?`
+            }
+            description={
+              confirmTarget.verb === 'delete'
+                ? 'The campaign, its steps, and its enrollments are removed permanently.'
+                : 'The campaign becomes read-only history. Duplicating it later still works.'
+            }
+            confirmLabel={confirmTarget.verb === 'delete' ? 'Delete campaign' : 'Archive campaign'}
+            loading={busyId === confirmTarget.campaign.id}
+            onConfirm={() => runAction(confirmTarget.campaign, confirmTarget.verb)}
+            onCancel={() => setConfirmTarget(null)}
+          />
+        )
       ) : null}
     </div>
   )
@@ -398,6 +420,37 @@ function CampaignActions({ row, canWrite, onAction, busyId, onConfirm }) {
         }}
       >
         {busy ? 'Submitting…' : 'Submit for approval'}
+      </button>,
+    )
+  }
+
+  if (meta.nextAction === 'approve') {
+    buttons.push(
+      <button
+        key="approve"
+        type="button"
+        className="camp__row-action"
+        disabled={busy}
+        onClick={(event) => {
+          event.stopPropagation()
+          onAction(row, 'approve')
+        }}
+      >
+        {busy ? 'Approving…' : 'Approve'}
+      </button>,
+    )
+    buttons.push(
+      <button
+        key="reject"
+        type="button"
+        className="camp__row-action camp__row-action--danger"
+        disabled={busy}
+        onClick={(event) => {
+          event.stopPropagation()
+          onConfirm({ campaign: row, verb: 'reject' })
+        }}
+      >
+        Reject
       </button>,
     )
   }
@@ -480,106 +533,3 @@ function CampaignActions({ row, canWrite, onAction, busyId, onConfirm }) {
   )
 }
 
-function CreateCampaignModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState({
-    name: '',
-    subject: '',
-    body: '',
-  })
-  const [errors, setErrors] = useState({})
-  const [creating, setCreating] = useState(false)
-  const [serverError, setServerError] = useState(null)
-
-  useEffect(() => {
-    if (!open) return
-    setForm({ name: '', subject: '', body: '' })
-    setErrors({})
-    setServerError(null)
-  }, [open])
-
-  async function submit(event) {
-    event.preventDefault()
-    const validation = {}
-    if ((form.name ?? '').trim().length < 2) {
-      validation.name = 'Give the campaign a name of at least 2 characters.'
-    }
-    if (!(form.subject ?? '').trim()) {
-      validation.subject = 'The first step needs a subject line.'
-    }
-    if (!(form.body ?? '').trim()) {
-      validation.body = 'The first step needs a body.'
-    }
-    setErrors(validation)
-    if (Object.keys(validation).length > 0) return
-
-    setCreating(true)
-    setServerError(null)
-    try {
-      const campaign = await createCampaign({
-        name: form.name.trim(),
-        subject: form.subject.trim(),
-        body: form.body.trim(),
-      })
-      onCreated(campaign)
-    } catch (caught) {
-      setServerError(caught?.message || 'The campaign could not be created.')
-      setCreating(false)
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      title="New campaign"
-      description="Seeds a draft with a first step. Audience, mailboxes, more steps, and scheduling are added by the campaign wizard."
-      size="lg"
-      onClose={creating ? undefined : onClose}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={creating}>
-            Cancel
-          </Button>
-          <Button variant="primary" leadingIcon={Plus} onClick={submit} loading={creating}>
-            Create draft
-          </Button>
-        </>
-      }
-    >
-      <form className="camp-create" onSubmit={submit} noValidate>
-        <TextField
-          id="camp-name"
-          label="Campaign name"
-          value={form.name}
-          maxLength={255}
-          error={errors.name}
-          hint="Shown across lists, stats, and the audit log."
-          onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-        />
-        <TextField
-          id="camp-subject"
-          label="First step subject"
-          value={form.subject}
-          maxLength={500}
-          error={errors.subject}
-          hint="Merge fields like {{first_name}} and {{company_name}} are supported."
-          onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
-        />
-        <TextareaField
-          id="camp-body"
-          label="First step body (plain text for now)"
-          rows={6}
-          value={form.body}
-          error={errors.body}
-          hint="You can rewrite this in the sequence editor with the rich-text editor and merge-field picker."
-          onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))}
-        />
-
-        {serverError ? (
-          <p className="camp__error" role="alert">
-            {serverError}
-          </p>
-        ) : null}
-      </form>
-    </Modal>
-  )
-}

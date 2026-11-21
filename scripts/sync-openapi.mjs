@@ -4,13 +4,13 @@
  *
  * Usage:
  *   npm run sync:openapi
- *   REYVO_API_ORIGIN=http://localhost:8001 npm run sync:openapi
+ *   REYVO_API_ORIGIN=http://127.0.0.1:8001 npm run sync:openapi
  */
 import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
-const ORIGIN = (process.env.REYVO_API_ORIGIN || 'http://localhost:8000').replace(/\/+$/, '')
+const ORIGIN = (process.env.REYVO_API_ORIGIN || 'http://127.0.0.1:8000').replace(/\/+$/, '')
 const TARGET = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'openapi.json')
 
 async function main() {

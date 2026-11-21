@@ -49,11 +49,13 @@ export function SessionProvider({ children }) {
   useEffect(
     () =>
       onSessionExpired(() => {
+        clearAllSessions()
         setSession(null)
         setProfile(null)
         setProfileStatus('anonymous')
         setTenantDetails(null)
         setTenantStatus('idle')
+        navigate('/login', { replace: true })
       }),
     [],
   )

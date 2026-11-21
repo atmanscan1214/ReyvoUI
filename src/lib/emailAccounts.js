@@ -97,6 +97,7 @@ export function normalizeEmailAccount(raw) {
     replyTo: raw?.reply_to ?? null,
     signatureHtml: raw?.signature_html ?? null,
     status: raw?.status ?? 'disconnected',
+    isPaused: Boolean(raw?.is_paused),
     dailyCap: Number(raw?.daily_cap ?? 0),
     hourlyCap: Number(raw?.hourly_cap ?? 0),
     rampStage: Number(raw?.ramp_stage ?? 1),
@@ -105,6 +106,48 @@ export function normalizeEmailAccount(raw) {
     lastError: raw?.last_error ?? null,
     createdAt: raw?.created_at ?? null,
     updatedAt: raw?.updated_at ?? null,
+  }
+}
+
+/**
+ * Health summary from the fields `EmailAccountRead` actually exposes. The API
+ * has no bounce/error telemetry, per-inbox send counters, or a
+ * last-successful-send timestamp, so the page never shows invented numbers —
+ * only the status, the provider's last error, caps, and warm-up facts.
+ */
+export function explainMailboxHealth(account = {}) {
+  const status = String(account.status ?? 'disconnected')
+  const dailyCap = Number(account.dailyCap ?? 0)
+  const hourlyCap = Number(account.hourlyCap ?? 0)
+  const rampStage = Number(account.rampStage ?? 1)
+  const reason = String(account.lastError ?? '').trim() || null
+
+  const explanation = {
+    connected: 'Healthy — the latest health check passed and this mailbox can send.',
+    degraded:
+      'The provider responded, but the latest health check raised a warning. Sends are allowed.',
+    needs_reauth: 'Access expired. Sends from this mailbox are blocked until it is reconnected.',
+    error: 'The latest health check failed. Sends from this mailbox are blocked.',
+    disconnected: 'No active connection. This mailbox cannot send until it is reconnected.',
+  }[status] ?? 'This mailbox needs a manual review.'
+
+  const nextAction = {
+    connected: 'Keep sending within the cap and keep watching the health checks.',
+    degraded: 'Open the detail page, check the warning, and limit volume until it clears.',
+    needs_reauth: 'Reconnect this mailbox from the mailboxes page to restore sending.',
+    error: 'Open the detail page, review the provider error, and reconnect or fix the mailbox.',
+    disconnected: 'Reconnect this mailbox from the mailboxes page to restore sending.',
+  }[status] ?? 'Review this mailbox and confirm the provider state.'
+
+  return {
+    status,
+    explanation,
+    nextAction,
+    reason,
+    dailyCap,
+    hourlyCap,
+    warmupStage: rampStage,
+    summary: `${dailyCap.toLocaleString()} / ${hourlyCap.toLocaleString()} cap · warm-up ${rampStage}`,
   }
 }
 
@@ -139,6 +182,11 @@ export async function getEmailAccount(id, signal) {
 export async function updateEmailAccount(id, payload, signal) {
   const data = await api.patch(`/email-accounts/${encodeURIComponent(id)}`, payload, { signal })
   return normalizeEmailAccount(data)
+}
+
+/** Inbox-level pause (T30): stored on the account and enforced by the sender. */
+export async function setEmailAccountPaused(id, paused, signal) {
+  return updateEmailAccount(id, { is_paused: Boolean(paused) }, signal)
 }
 
 export async function disconnectEmailAccount(id, signal) {

@@ -8,6 +8,7 @@ import { ForgotPasswordPage } from './pages/forgot-password/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/reset-password/ResetPasswordPage'
 import { InvitePage } from './pages/invite/InvitePage'
 import { MfaChallengePage } from './pages/mfa/MfaChallengePage'
+import { MfaSetupPage } from './pages/mfa/MfaSetupPage'
 import { WelcomePage } from './pages/welcome/WelcomePage'
 import { WelcomeLayout } from './pages/welcome/WelcomeLayout'
 import { AddressPage } from './pages/welcome/AddressPage'
@@ -19,8 +20,12 @@ import { AreaGuard } from './pages/app/AreaGuard'
 import { AppNotFound, AppPlaceholder } from './pages/app/AppPlaceholder'
 import { APP_AREAS, isRestrictedArea } from './pages/app/navigation'
 import { UiKitPage } from './pages/app/ui-kit/UiKitPage'
+import { DashboardPage } from './pages/app/dashboard/DashboardPage'
+import { ReportsPage } from './pages/app/reports/ReportsPage'
 import { SecurityPage } from './pages/app/security/SecurityPage'
 import { AccountPage } from './pages/app/account/AccountPage'
+import { RepliesPage } from './pages/app/replies/RepliesPage'
+import { ReplyDetailPage } from './pages/app/replies/ReplyDetailPage'
 import { CompaniesPage } from './pages/app/companies/CompaniesPage'
 import { CompanyDetailPage } from './pages/app/companies/CompanyDetailPage'
 import { ContactsPage } from './pages/app/contacts/ContactsPage'
@@ -30,7 +35,18 @@ import { ListsPage } from './pages/app/lists/ListsPage'
 import { SuppressionsPage } from './pages/app/suppressions/SuppressionsPage'
 import { MailboxesPage } from './pages/app/mailboxes/MailboxesPage'
 import { MailboxDetailPage } from './pages/app/mailboxes/MailboxDetailPage'
+import { MailboxHealthPage } from './pages/app/mailboxes/MailboxHealthPage'
+import { AdminPage } from './pages/app/admin/AdminPage'
+import { BillingPage } from './pages/app/billing/BillingPage'
+import { NotificationsPage } from './pages/app/notifications/NotificationsPage'
+import { WorkspaceSettingsPage } from './pages/app/settings/WorkspaceSettingsPage'
+import { TeamPage } from './pages/app/team/TeamPage'
 import { CampaignsPage } from './pages/app/campaigns/CampaignsPage'
+import { CampaignDetailPage } from './pages/app/campaigns/CampaignDetailPage'
+import { CampaignWizardPage } from './pages/app/campaigns/CampaignWizardPage'
+import { OpportunityDetailPage } from './pages/app/pipeline/OpportunityDetailPage'
+import { PipelinePage } from './pages/app/pipeline/PipelinePage'
+import { TasksPage } from './pages/app/tasks/TasksPage'
 import { SessionProvider } from './lib/session'
 import './components/ui/ui.css'
 
@@ -39,13 +55,16 @@ const AREA_ROUTES = Object.entries(APP_AREAS).filter(
     key !== 'dashboard' &&
     key !== 'security' &&
     key !== 'account' &&
+    key !== 'settings' &&
+    key !== 'team' &&
     key !== 'companies' &&
     key !== 'contacts' &&
     key !== 'lists' &&
     key !== 'imports' &&
     key !== 'suppressions' &&
     key !== 'mailboxes' &&
-    key !== 'campaigns',
+    key !== 'campaigns' &&
+    key !== 'notifications',
 )
 
 export default function App() {
@@ -66,6 +85,14 @@ export default function App() {
             element={
               <SessionProvider>
                 <MfaChallengePage />
+              </SessionProvider>
+            }
+          />
+          <Route
+            path="/mfa/setup"
+            element={
+              <SessionProvider>
+                <MfaSetupPage />
               </SessionProvider>
             }
           />
@@ -91,7 +118,7 @@ export default function App() {
               </SessionProvider>
             }
           >
-            <Route index element={<AppPlaceholder area={APP_AREAS.dashboard} />} />
+            <Route index element={<DashboardPage />} />
             <Route
               path="settings/security"
               element={
@@ -101,6 +128,24 @@ export default function App() {
               }
             />
             <Route path="settings/account" element={<AccountPage />} />
+            <Route
+              path="settings"
+              element={
+                <AreaGuard area={APP_AREAS.settings}>
+                  <WorkspaceSettingsPage />
+                </AreaGuard>
+              }
+            />
+            <Route
+              path="settings/team"
+              element={
+                <AreaGuard area={APP_AREAS.team}>
+                  <TeamPage />
+                </AreaGuard>
+              }
+            />
+            <Route path="replies" element={<RepliesPage />} />
+            <Route path="replies/:replyId" element={<ReplyDetailPage />} />
             <Route path="companies" element={<CompaniesPage />} />
             <Route path="companies/:companyId" element={<CompanyDetailPage />} />
             <Route path="contacts" element={<ContactsPage />} />
@@ -109,8 +154,34 @@ export default function App() {
             <Route path="lists" element={<ListsPage />} />
             <Route path="suppressions" element={<SuppressionsPage />} />
             <Route path="mailboxes" element={<MailboxesPage />} />
+            <Route path="mailboxes/health" element={<MailboxHealthPage />} />
             <Route path="mailboxes/:mailboxId" element={<MailboxDetailPage />} />
+            <Route
+              path="billing"
+              element={
+                <AreaGuard area={APP_AREAS.billing}>
+                  <BillingPage />
+                </AreaGuard>
+              }
+            />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="unsubscribe" element={<UnsubscribePage />} />
+            <Route path="status" element={<StatusPage />} />
+            <Route
+              path="admin"
+              element={
+                <AreaGuard area={APP_AREAS.admin}>
+                  <AdminPage />
+                </AreaGuard>
+              }
+            />
             <Route path="campaigns" element={<CampaignsPage />} />
+            <Route path="campaigns/:campaignId" element={<CampaignDetailPage />} />
+            <Route path="campaigns/new" element={<CampaignWizardPage />} />
+            <Route path="pipeline" element={<PipelinePage />} />
+            <Route path="pipeline/:opportunityId" element={<OpportunityDetailPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="tasks" element={<TasksPage />} />
             {AREA_ROUTES.map(([key, area]) => (
               <Route
                 key={key}

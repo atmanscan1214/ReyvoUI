@@ -281,6 +281,42 @@ export async function updateContact(contactId, values) {
   return normalizeContact(data)
 }
 
+/**
+ * Append a timestamped note to a contact's existing notes (T33 reply actions).
+ * `ContactUpdate` replaces the whole record, so this fetches the current
+ * contact first and PATCHes the merged payload — a sub-resource
+ * `POST /contacts/{id}/notes` does not exist in this build.
+ */
+export async function appendContactNote(contactId, note, { occurredAt } = {}) {
+  const current = await getContact(contactId)
+  const stamp = occurredAt
+    ? new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(
+        new Date(occurredAt),
+      )
+    : new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date())
+  const entry = `[${stamp}] ${String(note ?? '').trim()}`
+  const merged = current.notes ? `${current.notes}\n${entry}` : entry
+  return updateContact(contactId, {
+    companyId: current.companyId,
+    firstName: current.firstName,
+    lastName: current.lastName,
+    title: current.title,
+    email: current.email,
+    emailStatus: current.emailStatus,
+    phone: current.phone,
+    linkedinUrl: current.linkedinUrl,
+    source: current.source,
+    status: current.status,
+    notes: merged,
+    // `toContactPayload` iterates { key, value } pairs, while `normalizeContact`
+    // returns an object — convert here.
+    customFields: Object.entries(current.customFields ?? {}).map(([key, value]) => ({
+      key,
+      value,
+    })),
+  })
+}
+
 export async function deleteContact(contactId) {
   await api.delete(`/contacts/${encodeURIComponent(contactId)}`)
   removeContactTags(contactId)

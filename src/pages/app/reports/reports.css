@@ -1,0 +1,122 @@
+.reports-page {
+  display: grid;
+  gap: 18px;
+}
+
+.reports-page__summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.reports-page__stat {
+  display: grid;
+  gap: 10px;
+  padding: 18px 16px;
+}
+
+.reports-page__stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reports-page__stat-head span {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.reports-page__stat strong {
+  color: var(--ink);
+  font-size: clamp(1.35rem, 2vw, 2.1rem);
+}
+
+.reports-page__stat small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.reports-page__panel {
+  padding: 18px 20px;
+  min-width: 0;
+}
+
+/* The stats/tables have real min-widths (scrolling table wraps); stop that
+   min-content from inflating the flex ancestors (.app-page, .app-main) and
+   blowing out the shell at narrow widths. */
+.reports-page > * {
+  min-width: 0;
+}
+
+.app-main:has(.reports-page) {
+  min-width: 0;
+}
+
+.reports-page__section-head {
+  margin-bottom: 14px;
+}
+
+.reports-page__section-head h2 {
+  margin: 4px 0 0;
+  color: var(--ink);
+}
+
+.reports-page__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.reports-page__table-wrap {
+  overflow-x: auto;
+}
+
+.reports-page__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.reports-page__table th,
+.reports-page__table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  color: var(--ink);
+  vertical-align: top;
+}
+
+.reports-page__table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.reports-page__gapnote {
+  margin: 0 0 14px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.reports-page__empty {
+  padding: 18px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+@media (max-width: 1200px) {
+  .reports-page__summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .reports-page__summary,
+  .reports-page__grid {
+    grid-template-columns: 1fr;
+  }
+}

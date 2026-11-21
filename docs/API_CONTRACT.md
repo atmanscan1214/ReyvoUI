@@ -1,15 +1,15 @@
 # Reyvo API contract
 
-Baseline for the frontend. Captured from the running backend on **10 November 2026**.
+Baseline for the frontend. Captured from the running backend on **21 November 2026**.
 
 | | |
 |---|---|
-| Source | `GET http://localhost:8000/openapi.json` |
+| Source | `GET http://127.0.0.1:8000/openapi.json` |
 | Snapshot | [`docs/openapi.json`](./openapi.json) |
 | OpenAPI | 3.1.0 |
 | API title / version | Reyvo API `0.1.0` |
-| Paths / schemas | 62 / 97 |
-| Base URL | `http://localhost:8000` |
+| Paths / schemas | 109 / 147 |
+| Base URL | `http://127.0.0.1:8000` |
 | Prefix | `/api/v1` (except `/health`, `/health/ready`) |
 
 Refresh the snapshot whenever the backend changes:
@@ -17,7 +17,7 @@ Refresh the snapshot whenever the backend changes:
 ```powershell
 npm run sync:openapi
 # or against another origin
-$env:REYVO_API_ORIGIN = 'http://localhost:8001'; npm run sync:openapi
+$env:REYVO_API_ORIGIN = 'http://127.0.0.1:8001'; npm run sync:openapi
 ```
 
 The snapshot is the source of truth for request and response shapes. This document explains the
@@ -170,7 +170,7 @@ Paginated collections return `Page[T]`:
 | `GET /opportunities` | `stage`, `owner_id`, `contact_id` |
 | `GET /suppressions` | `reason` |
 | `GET /admin/tenants` | `search`, `status` |
-| `GET /tenants/current/audit-logs` | `action` |
+| `GET /tenants/current/audit-logs` | `action`, `actor_type`, `search`, `since`, `until` |
 
 Search is a case-insensitive substring match on the server; it is not full-text search.
 
@@ -185,11 +185,11 @@ All paths below are relative to `/api/v1` and require a Bearer token unless mark
 | Endpoint | Purpose | Auth |
 |---|---|---|
 | `POST /auth/register` | Create user, tenant, owner membership, trial | public |
-| `POST /auth/login` | Password login | public |
+| `POST /auth/login` | Password login; returns a short-lived MFA challenge when required | public |
 | `POST /auth/refresh` | Exchange refresh token for a new pair | public |
 | `GET /auth/me` | Current user, tenant, role | required |
 | `GET /auth/sso/authorize` | Start SSO | required |
-| `GET/POST /auth/sso/callback` | Finish SSO | public |
+| `GET/POST /auth/sso/callback` | Finish SSO; users with MFA receive a challenge before tokens | public |
 
 ### Email verification (not implemented)
 
@@ -206,60 +206,100 @@ a local single-use challenge stored under `reyvo.onboarding.v1`; the UI labels t
 “Development only”. A production build surfaces an honest unavailable error instead of pretending the
 address was verified. When the real endpoints ship, only the adapter needs to change.
 
-### Password reset, MFA, and invitations (not implemented)
+### Password reset (not implemented)
 
-The snapshot contains **no** endpoint for any of the three account-recovery flows. `src/lib/` defines
-provisional paths so the UI can be wired now and switched on when the backend lands:
+The API does not expose a password-reset flow yet. `src/lib/passwordReset.js` defines provisional
+paths and uses a clearly labelled, development-only local flow until those endpoints ship:
 
-| Flow | Provisional endpoints | Body | Expected behaviour |
-|---|---|---|---|
-| Password reset | `POST /auth/password/forgot` | `{ email }` | Email a single-use link that expires in 30 minutes; neutral response either way |
-| Password reset | `POST /auth/password/reset` | `{ token, password }` | Set the new password, invalidate every session, or report expired / invalid / used |
-| MFA | `POST /auth/mfa/enroll` | — | Return a TOTP secret for the current user |
-| MFA | `POST /auth/mfa/verify` | `{ code }` | Accept a rotating code (with clock drift), or report locked |
-| Invitations | `POST /invites` | `{ email, role }` | Send a 7-day single-use invitation |
-| Invitations | `POST /invites/{token}/accept` | `{ full_name, password }` | Create the member, or report expired / invalid / already accepted |
+| Provisional endpoint | Body | Expected behaviour |
+|---|---|---|
+| `POST /auth/password/forgot` | `{ email }` | Email a single-use link that expires in 30 minutes; neutral response either way |
+| `POST /auth/password/reset` | `{ token, password }` | Set the new password and invalidate sessions |
 
-`src/lib/passwordReset.js`, `src/lib/mfa.js`, and `src/lib/invites.js` call these first. A `404`/`405`
-in a **development build** falls back to single-use, time-boxed records under
-`reyvo.passwordResets.v1` (30-minute links), `reyvo.mfa.v1` (10-minute enrollment, 5-minute
-challenges, 5-attempt lock), and `reyvo.invites.v1` (7-day invitations). The screens label every
-state-switching link “Development only”. Production builds surface an honest unavailable error
-instead of faking success. When the real endpoints ship, only the adapters need to change.
+### MFA, password, and session security
 
-### Account settings (not implemented)
+| Endpoint | Purpose | Auth |
+|---|---|---|
+| `GET /auth/mfa/status` | Read current MFA and pending-enrollment status | Required |
+| `POST /auth/mfa/enroll` | Start a 10-minute TOTP enrollment; returns the setup key once | Required |
+| `POST /auth/mfa/enroll/cancel` | Discard pending enrollment | Required |
+| `POST /auth/mfa/verify` | Confirm enrollment using a six-digit TOTP | Required |
+| `POST /auth/mfa/disable` | Disable MFA after confirming a current TOTP | Required |
+| `POST /auth/mfa/setup` | Start mandatory first-time setup for a platform administrator | Public challenge |
+| `POST /auth/mfa/challenge` | Verify a login/setup challenge and issue tokens | Public challenge |
+| `POST /auth/password/change` | Change password after checking the current password | Required |
+| `GET /auth/sessions` | List this user’s active sessions in the current workspace | Required |
+| `DELETE /auth/sessions/{id}` | Revoke one session | Required |
+| `POST /auth/sessions/revoke-all` | Revoke all sessions, optionally keeping this one | Required |
 
-The snapshot exposes only `GET /auth/me`. `src/lib/account.js` defines provisional paths for the T10
-actions:
+MFA uses RFC 6238 TOTP (six digits, 30-second step, one-step clock drift), with five attempts per
+enrollment or challenge. Login does not issue access or refresh tokens until the challenge succeeds;
+challenge identifiers are random bearer values stored only as SHA-256 hashes, expire after five
+minutes (ten minutes for required initial setup), and are single-use. MFA secrets are encrypted at
+rest. Platform administrators must enroll before receiving a session and cannot disable MFA.
+Password changes verify the existing password and revoke every other active session. Sessions are
+server-tracked, so revocation invalidates access tokens immediately as well as preventing refresh.
+Disabling MFA also revokes every other active session for the account. When deploying session-backed
+authentication, users holding pre-deployment tokens must sign in again because those tokens have no
+server session record.
+
+### Invitations and team access
+
+| Endpoint | Purpose | Auth |
+|---|---|---|
+| `GET /tenants/current/invitations` | List tenant-scoped invitation status | Owner/admin |
+| `POST /tenants/current/invitations` | Create a 7-day invitation and return its link | Owner/admin |
+| `POST /tenants/current/invitations/{id}/resend` | Rotate the single-use token and expiry | Owner/admin |
+| `DELETE /tenants/current/invitations/{id}` | Revoke a pending invitation | Owner/admin |
+| `GET /invites/{token}` | Inspect an invitation | Public bearer link |
+| `POST /invites/{token}/accept` | Accept an invitation and create or attach the membership | Public bearer link |
+| `PATCH /tenants/current/members/{id}` | Change a member role | Owner |
+| `DELETE /tenants/current/members/{id}` | Remove workspace access while retaining history | Owner |
+
+Invitation tokens are generated randomly, stored only as SHA-256 hashes, single-use, and expire after
+seven days. Existing Reyvo accounts must confirm their current password; new invitees create an
+account and join the tenant in one transaction. SMTP sends the link when configured. If no SMTP
+relay is configured or delivery fails, the authenticated create/resend response explicitly reports
+the delivery status and returns the valid link for manual sharing. Role changes, invitation actions,
+acceptance, and membership removal are written to the tenant audit log. Removing or demoting an
+owner locks active owner records and is rejected if it would leave the tenant without an owner.
+
+### Account settings (partial)
+
+The API exposes `GET /auth/me`; profile editing and email change still use provisional paths:
 
 | Action | Provisional endpoint | Body | Expected behaviour |
 |---|---|---|---|
 | Profile | `PATCH /auth/me` | `{ full_name }` | Update the current user’s display name |
 | Email change | `POST /auth/email-change` | `{ email, current_password }` | Verify the password, then send a signed link to the new address |
 | Email confirm | `POST /auth/email-change/confirm` | `{ token }` | Apply the new address and invalidate every session |
-| Password change | `POST /auth/password/change` | `{ current_password, new_password }` | Rotate the password and invalidate every other session |
-| Sessions | `GET /auth/sessions` | — | List active sessions with device, IP, and last activity |
-| Sessions | `DELETE /auth/sessions/{id}` | — | Revoke one session |
-| Sessions | `POST /auth/sessions/revoke-all` | `{ keep_current }` | Revoke every session, or every other session |
 
-A `404`/`405` in a **development build** falls back to `reyvo.account.v1` (name override, pending
-24-hour email change, password-change timestamp) and `reyvo.sessions.v1` (demo session list).
-Development verifies the current password with the live `POST /auth/login` route before recording an
-email or password change, and revokes the other demo sessions on success. It cannot rotate the server
-password or deliver mail, so the UI states that limitation and production builds report the feature
-as unavailable. When the real endpoints ship, only the adapter needs to change.
+Development-only browser fallbacks remain for profile and email changes; password and session
+operations are server-backed.
 
 ### Tenant, team, usage, audit
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /tenants/current` | Tenant profile (`status`, `plan_code`, `timezone`, `physical_address`, `settings`) |
-| `PATCH /tenants/current` | Update tenant profile and sending defaults |
+| `PATCH /tenants/current` | Update agency identity, IANA timezone, physical address, and validated workspace defaults |
 | `GET /tenants/current/members` | Membership list |
 | `PATCH /tenants/current/members/{membership_id}` | Change role / status |
 | `GET /tenants/current/usage` | Contacts, companies, campaigns, messages, replies, seats, daily cap |
-| `GET /tenants/current/audit-logs` | Paginated tenant audit log |
+| `GET /tenants/current/audit-logs` | Paginated tenant audit log; supports `action`, `actor_type`, `search`, `since`, and `until` |
+| `GET /tenants/current/audit-logs/export` | Filtered CSV export, capped at 10,000 rows |
 | `GET/PATCH/DELETE /tenants/current/sso` | Read, update, disable SSO |
+
+Audit reads and exports are restricted to workspace owners/admins. Audit rows include the actor
+type; platform administrator actions are recorded as `platform_admin` and remain visible in the
+tenant-scoped log and CSV export.
+
+Workspace settings use `settings.default_sending_window` (`local_window.start/end` and
+`send_days`), `settings.default_daily_cap` (campaign messages/day), `settings.default_signature`
+(plain text), `settings.chat_retention_days` (assistant conversation history), and
+`settings.ai_drafting_enabled`. New campaigns inherit the timezone, window, and cap unless they
+provide an override. Campaign launch preflight blocks a workspace without street, city, postal code,
+and country.
 
 ### Companies
 
@@ -434,7 +474,9 @@ Behavior notes from live verification:
 - **Campaign audience contract:** because campaign resolution only understands `status` and
   `company_id` from `segment.definition`, segments cannot be resolved server-side. The lists page
   writes the pending audience (`{ key, type: 'list' | 'segment', id, name, count, typeLabel, savedAt }`)
-  to `reyvo.campaignAudience.v1` for the campaign wizard (T21) to consume.
+  to `reyvo.campaignAudience.v1`; the T21 wizard consumed this contract — the banner pre-selects
+  the handed-over audience and segments resolve to contact ids at creation (see the wizard slice
+  under Campaigns).
 
 ### Suppressions
 
@@ -544,10 +586,73 @@ Behavior notes (T20 slice):
   but the UI only offers it for drafts.
 - There is no duplicate endpoint — the UI composes one from `GET /{id}` (which includes `steps`,
   audience ids, caps, sending window) + `POST /campaigns`.
-- The T20 page owns only list-level actions: create, duplicate, submit, archive, delete. Approve,
-  reject, launch, pause, resume, preflight, preview, stats, and enrollments belong to the approval
-  workflow (T25) and the campaign detail (T26); the UI shows hints for those states instead.
+- The T20 page owns list-level actions: create, duplicate, submit, archive, delete, and (since
+  T25) approve/reject for `pending_approval` rows — reject sends a note and returns the campaign
+  to draft. Launch, pause, resume, preflight, preview, stats, and enrollments belong to the
+  campaign detail page (T26) and the wizard's review step.
 - No RBAC on this route in this build: member read-only is UI policy, same as the other list pages.
+
+Wizard slice (T21–T24):
+
+- The wizard at `/app/campaigns/new` is the full §5.4.2 flow: audience, mailboxes, sequence
+  (1–8 steps, business-day delays, HTML subject/body with a merge-field picker; unknown merge
+  fields block creation and a plain-text fallback is previewed), schedule (send days, local
+  window, timezone strategy, holiday skip; next-send preview computed with real IANA/DST math in
+  the page), and review. "Create draft campaign" posts everything at once via `POST /campaigns`
+  with `audience_type`/`audience_id`/`contact_ids`/`email_account_ids`, the full `steps` array
+  (`ai_generated` flags included), and `sending_window` (`timezone`, `timezone_strategy`,
+  `local_window`, `send_days`, `skip_holidays`). `daily_cap` posts the API default of 200.
+- The review step then consumes the live campaign endpoints: `GET /{id}/preflight` for blocking
+  reasons (launch stays blocked until they clear), `POST /{id}/preview` for a sample contact per
+  step, and the mailbox test-send endpoint.
+- **No audience/exclusion endpoint exists in this build**, so the wizard composes audience and
+  exclusion counts in the browser (`src/lib/wizard.js`): list audiences page
+  `GET /lists/{id}/contacts`; segment audiences evaluate the saved definition (T16's browser store)
+  over the contact snapshot; exclusions combine `GET /suppressions`, cross-campaign enrollments
+  (`GET /campaigns` → `GET /campaigns/{id}/enrollments` per campaign, capped 2,000), and contact
+  fields (no email, contacted within 30 days). The breakdown is counted per contact by priority so
+  parts sum to the total, and capped counts are labelled as estimates.
+- List audiences post as `audience_type: 'list'` + `audience_id`; segments resolve client-side to
+  `audience_type: 'contacts'` + the resolved `contact_ids` because there is no `/segments` route
+  for the server to persist a definition into. Mailboxes post as `email_account_ids`.
+- Send-plan math is client-side: capacity = Σ selected inbox daily caps (from
+  `GET /email-accounts`), first-day = min(net, capacity), first pass ≈ ceil(net/capacity) days.
+- AI drafting uses the live `POST /ai/draft` (subject/body from a prompt), but the AI approval
+  mode and quota usage are browser-local (`localStorage`), not tenant settings — there is no
+  tenant AI-config endpoint in this build.
+
+Browser-local and demo surfaces (not API-backed):
+
+- Sending controls (T30) are API-backed: `POST /tenants/current/sending-pause` (owner/admin,
+  send-only flag `sending_paused_at`), `PATCH /email-accounts/{id}` with `is_paused`, and campaign
+  `POST /campaigns/{id}/pause|resume` (all audited). The platform kill switch is
+  `GET/POST /admin/sending-controls` (platform staff only; audited `admin.kill_switch_changed`);
+  tenant roles get 403 and the page shows a "Platform staff only" panel. The backend forces MFA
+  enrollment on every login for platform-admin users.
+- `MailboxHealthPage` summarizes the live `/email-accounts` list from the fields
+  `EmailAccountRead` returns (status, `last_error`, caps, warm-up, `last_health_check_at`); the API
+  exposes no per-inbox send counters, bounce/error rates, or last-successful-send timestamps, so
+  the page shows no telemetry columns and says so.
+- The reports page (T39) reads live data — the campaigns list plus per-campaign
+  `/campaigns/{id}/stats`, the replies list (two pages, counted client-side with a capped-page
+  note), `/email-accounts`, the `/suppressions` total, and `/opportunities/pipeline` with a
+  client-side opportunity page for age/owner splits — and the CSV export runs on those live
+  rows. There is no aggregate reports endpoint and no date-range/timezone parameter in this
+  build, so windows are presented as all-time; per-step, error-rate, and per-campaign opt-out
+  breakdowns and "delivered" (not observable) are named as gaps on the page instead of faked.
+  The dashboard (T38), pipeline board (T36), and opportunity detail
+  (T37) read live data. The replies
+  list/actions (T32–T34) and the task queue (T35) read live data.
+- Billing (`src/lib/billing.js`) reads `GET /tenants/current/usage`, `/billing/plans`,
+  `/billing/subscription`, and cursor-paginated `GET /billing/invoices`, counts inboxes from
+  `/email-accounts`, and posts provider-backed checkout, plan-change, and portal requests. Plan
+  changes enforce target usage limits server-side (`409 downgrade_blocked` with per-resource
+  blockers, verified live); payment-failure webhooks provide a seven-day sending grace period.
+  Without Stripe credentials and plan price IDs, checkout/plan-change answer 503 and portal 400
+  (all surfaced verbatim), and invoices returns an empty page — the trial, grace, past-due,
+  canceled, and downgrade-blocked UI states were verified against seeded subscription rows on the
+  live backend; the provider round-trips remain unverified. Plan limits cap contacts, sending
+  inboxes, and the daily send cap only; there is no AI/message-volume meter in `UsageRead`.
 
 ### Replies, tasks, pipeline
 
@@ -570,6 +675,64 @@ Behavior notes (T20 slice):
 `TaskStatus`: `open`, `in_progress`, `completed`, `canceled`.
 `OpportunityStage`: `new`, `contacted`, `replied`, `meeting`, `won`, `not_interested`.
 
+Replies notes (T32):
+
+- `ReplyRead` carries ids, category, confidence, `classified_by`, `needs_review`, `snippet`,
+  `received_at`, and `assigned_to` — no inbox/mailbox field, no message bodies, and no date
+  filter parameter. The replies page filters by category/review state/campaign server-side and
+  names the rest as gaps instead of faking them.
+- Contact, campaign, and assignee names are mapped client-side from `/contacts`,
+  `/campaigns`, and `/tenants/current/members` (first 100 each, same sampling trade-off as the
+  other pickers).
+- There is **no `GET /replies/{id}`** — the detail route supports `PATCH` only. The reply detail
+  page locates a single reply by walking list pages (capped 5 pages / 500 rows).
+- Unmatched replies (no `contact_id` or no `campaign_id`) are badged and filterable on the page —
+  the old demo's fake `test` category does not exist in the API enum.
+- The snippet is untrusted provider HTML: `sanitizeReplyHtml` in `src/lib/replies.js` strips
+  scripts, remote content blocks, and link attributes before `dangerouslySetInnerHTML`, and it now
+  runs on live snippets.
+- Reply actions (T33) write through: `PATCH /replies/{id}` reclassifies / flags for review /
+  reassigns (the backend then reports `classified_by: "user"`); contact notes are appended through
+  `PATCH /contacts/{id}` because there is no notes sub-resource; follow-up tasks go through
+  `POST /tasks` (`src/lib/tasks.js` — `TaskCreate` requires only `title`, priority is a free
+  string, status is writable only via `PATCH /tasks/{id}`); suppression goes through
+  `POST /suppressions` with the `SuppressionReason` enum (duplicates answer 409). There is no
+  `DELETE /tasks/{id}` — task cleanup is not possible from the UI.
+- Stop-sequence and "open in provider" are not buildable on the reply detail: `message_id` is an
+  internal UUID, not a provider message id.
+- Classification & assignment (T34) live in the inbox: one-click approval clears `needs_review`,
+  and the reader's correction form PATCHes category/assignee/review state. A category correction
+  makes the backend set `classified_by: "user"` and clear the review flag automatically. The
+  backend ignores `assigned_to: null` — assignments can be changed but not cleared.
+- Task queue (T35) notes: status filtering is server-side (`GET /tasks?status=`), while
+  search/priority/assignee filtering is client-side over the loaded page (page size cap 100).
+  Overdue/Due-today are derived client-side from `due_at` against the start of today —
+  completed and canceled tasks are never overdue. There is no `DELETE /tasks/{id}`; the page
+  says tasks are completed or canceled, not removed. Contact/opportunity links are enriched
+  client-side from `/contacts` and `/opportunities` (first 100 each); `OpportunityRead` has no
+  name field, so opportunity labels are derived from the linked contact's name.
+- Pipeline board (T36) notes: stage counts and values come from the server
+  (`GET /opportunities/pipeline`); list enrichment uses contacts, companies, campaigns, and
+  members (first 100 each). Stage moves go through `PATCH /opportunities/{id}` after an
+  in-page confirm; a failed PATCH leaves the opportunity in its original stage with a retry
+  available, and "undo" is a real PATCH back to the previous stage. Won/Not-interested moves
+  require a reason that is stored in the opportunity's `notes` — the API has no dedicated
+  reason field and no configurable reason list. Every accepted move is audited server-side as
+  `opportunity.updated` with `before_data.stage` / `after_data.stage`; the board's audit trail
+  reads those entries back from `GET /tenants/current/audit-logs?action=opportunity.updated`.
+  Opportunities are not created or deleted from the board page — `POST /opportunities` and
+  `DELETE /opportunities/{id}` exist in the API but no UI flow needs them yet (creation comes
+  from replies/task flows).
+- Opportunity detail (T37) notes: the page reads `GET /opportunities/{id}` and applies the same
+  confirm/reason flow to stage changes as the board. The activity timeline combines
+  `opportunity.created` / `opportunity.updated` audit entries (entity-filtered client-side —
+  the audit endpoint filters by `action` only), the linked contact's replies (no `contact_id`
+  list filter exists, so replies are list-fetched and filtered client-side), and tasks linked
+  to the opportunity or contact. Sends and meetings are not observable in this API build (no
+  messages endpoint; a meeting is the Meeting stage) and note edits are not audited, so the
+  page omits those entries and says so. A notes-only PATCH is audited with an unchanged stage
+  and produces no timeline entry.
+
 ### Dashboard, AI
 
 | Endpoint | Purpose |
@@ -580,13 +743,30 @@ Behavior notes (T20 slice):
 `DashboardSummary` includes `as_of` (date) and per-stage `pipeline` totals. Daily boundaries use the
 tenant timezone; display it next to the date range.
 
+Dashboard notes (T38):
+
+- The endpoint accepts **no date-range or timezone parameter** — the all-time, 7-day, and today
+  windows are computed server-side. The page presents those windows as-is (with the `as_of`
+  date) and offers no selectable range.
+- The summary has **no opt-out field**; the dashboard's Opt-outs card reads the live
+  `/suppressions` total instead and says so on the card.
+- Inbox health is not in the summary either — the panel counts the live `/email-accounts` list
+  (connected vs needing attention, up to five rows) using the same health explanation as the
+  mailboxes pages.
+- `top_campaigns` is server-computed `CampaignPerformance` rows (`name`, `status`, `sent`,
+  `replies`); an empty list shows an explicit empty state rather than fixture rows.
+- "Delivered is not observable" (no provider confirmation) and "no open tracking" remain in the
+  definitions panel, now on live data.
+
 ### Billing
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /billing/plans` | Public plan catalogue |
-| `GET /billing/subscription` | Current subscription and trial state |
+| `GET /billing/subscription` | Current subscription, trial, and grace-period state |
 | `POST /billing/checkout` | Stripe Checkout session (`checkout_url`) |
+| `POST /billing/plan-change` | Change an active paid subscription after usage-limit checks |
+| `GET /billing/invoices` | Provider invoice history (owner/admin; cursor pagination) |
 | `POST /billing/portal` | Stripe Customer Portal session (`url`) |
 
 ### Admin (platform admins only)
@@ -617,10 +797,10 @@ tenant timezone; display it next to the date range.
 |---|---|
 | App shell | `/auth/me`, `/tenants/current` |
 | Onboarding | `/auth/me`, `/tenants/current`, `/tenants/current/usage`, `/email-accounts` (verification: provisional) |
-| Password reset | provisional `/auth/password/*` |
-| MFA | provisional `/auth/mfa/*` |
+| Password reset | provisional `/auth/password/forgot`, `/auth/password/reset` |
+| MFA and security | `/auth/mfa/*`, `/auth/sessions*`, `/auth/password/change` |
 | Invitations | provisional `/invites` |
-| Account settings | `/auth/me` (read), provisional `/auth/*` and `/auth/sessions*` |
+| Account settings | `/auth/me` (read), provisional profile/email paths, `/auth/password/change`, `/auth/sessions*` |
 | Companies | `/companies` |
 | Contacts | `/contacts`, `/contacts/{id}` |
 | Import | `/contacts/import`, `/lists` |
@@ -632,11 +812,12 @@ tenant timezone; display it next to the date range.
 | Replies inbox | `/replies`, `/contacts/{id}`, `/campaigns/{id}` |
 | Tasks | `/tasks` |
 | Pipeline | `/opportunities`, `/opportunities/pipeline` |
-| Dashboard and reports | `/dashboard/summary`, `/campaigns/{id}/stats` |
-| Billing | `/billing/plans`, `/billing/subscription` |
+| Dashboard and reports | `/dashboard/summary`, `/campaigns/{id}/stats`, `/replies`, `/email-accounts`, `/suppressions`, `/opportunities/pipeline` |
+| Billing | `/billing/plans`, `/billing/subscription`, `/billing/plan-change`, `/billing/invoices` |
 | Workspace settings | `/tenants/current` |
-| Team | `/tenants/current/members` |
+| Team | `/tenants/current/members`, `/tenants/current/invitations`, `/invites/{token}` |
 | Security and audit | `/tenants/current/audit-logs` |
+| Sending controls | `/tenants/current/sending-pause`, `/email-accounts/{id}` (`is_paused`), `/campaigns/{id}/pause\|resume`, `/admin/sending-controls*` (platform staff only) |
 | Platform admin | `/admin/tenants`, `/admin/audit-logs` |
 | Unsubscribe | `/u/{token}` |
 
@@ -660,14 +841,9 @@ These are backend extension points per `DEVELOPER_GUIDE.md`; the UI must not imp
   `POST /auth/resend-verification` are provisional client paths; development builds use a local
   single-use challenge (`reyvo.onboarding.v1`) and production builds report the feature as
   unavailable. `users.email_verified_at` is returned by `/auth/me` but nothing sets it yet.
-- There are no password-reset, MFA, or invitation endpoints. The provisional paths in the table
-  above are client-side conventions; development builds keep single-use, time-boxed records in
-  `reyvo.passwordResets.v1`, `reyvo.mfa.v1`, and `reyvo.invites.v1` and production builds report the
-  feature as unavailable.
-- There are no profile, email-change, password-change, or session endpoints. The T10 provisional
-  paths above are client-side conventions; development keeps records in `reyvo.account.v1` and
-  `reyvo.sessions.v1`, verifies the current password against the live login route, and production
-  builds report the features as unavailable.
+- Password reset, profile editing, and email-change endpoints remain unavailable and are reported
+  honestly in production. MFA, password changes, revocable sessions, invitations, and tenant audit
+  search/export use server-backed endpoints.
 - There is no `/segments` or `/tags` endpoint. The `segments` table exists in the database but no
   router exposes it, and contacts have no tags field. The lists page keeps segments in
   `reyvo.segments.v1` and tags in `reyvo.contactTags.v1`, evaluated client-side, and hands the pending
@@ -679,3 +855,42 @@ These are backend extension points per `DEVELOPER_GUIDE.md`; the UI must not imp
   "blocked by platform".
 - Sources under `ReyvoAPI/ReyvoApi/src/reyvo/*.py` were missing at capture time. The API was
   reachable from a running process, but restarting it may require restoring the sources.
+
+## 7. API client utilities
+
+The frontend uses a single `src/lib/api.js` module that provides:
+
+### Error types
+- `ApiError` — thrown on every failed API call with `status`, `code`, `details`, `fieldErrors`,
+  `requestId`, and `idempotencyKey` properties.
+- `ErrorCodes` — constant map: `NETWORK_ERROR`, `VALIDATION_ERROR`, `NOT_FOUND`, `CONFLICT`,
+  `RATE_LIMIT`, `AUTH_ERROR`, `TOKEN_EXPIRED`, `SERVER_ERROR`.
+- `PaginatedResponse` — wrapper for paginated `{ data, meta }` responses with `hasMore`,
+  `page`, `pageSize`, and `total` getters.
+- `PaginationOptions` — `DEFAULT_PAGE: 1`, `DEFAULT_PAGE_SIZE: 20`, `MAX_PAGE_SIZE: 100`.
+- `RetryConfig` — `MAX_RETRIES: 3`, `BACKOFF_MS: 500`, `RETRYABLE_STATUSES: [408, 429, 500, 502, 503, 504]`.
+- `isRetryableStatus(status)` / `isRetryableError(error)` — utility functions.
+
+### Pagination helpers
+- `api.list(path, options)` — fetches a paginated list. Accepts `page` and `pageSize` options.
+- `api.search(path, filter, options)` — fetches a filtered list, appending query parameters from the
+  filter object (e.g. `?search=foo&status=active`).
+
+### Query cache
+- `cacheQuery(key, fn)` — in-memory TTL cache (60s) with LRU eviction (max 50 entries).
+- `api.invalidateCache(key)` — removes a specific cached entry.
+- `api.clearCache()` — clears the entire cache.
+
+### Idempotency
+- `generateIdempotencyKey()` — generates a key of the form `idempotent-<timestamp>-<random>`.
+
+### Session expiry
+- `onSessionExpired(handler)` — registers a callback that fires when the session can no longer be
+  refreshed; returns an unsubscribe function.
+- `triggerSessionExpired()` — invokes the stored session expired handler (typically called when a
+  401 cannot be recovered from via refresh).
+
+### Exported constants and types
+- `ApiError`, `ErrorCodes`, `PaginationOptions`, `RetryConfig`, `isRetryableStatus`,
+  `isRetryableError`, `PaginatedResponse`, `onSessionExpired`
+- `request`, `authedRequest`, `api`, `API_BASE`

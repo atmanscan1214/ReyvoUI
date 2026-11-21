@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle,
@@ -56,6 +57,7 @@ function relativeFromNow(value) {
  * configuration, test send, and disconnect land with T19.
  */
 export function MailboxesPage() {
+  const navigate = useNavigate()
   const { role, profileStatus } = useSession()
   const { toast } = useToast()
 
@@ -126,15 +128,20 @@ export function MailboxesPage() {
           </>
         }
         actions={
-          canWrite ? (
-            <Button
-              variant="primary"
-              leadingIcon={Mail}
-              onClick={() => openConnect(null)}
-            >
-              Connect mailbox
+          <>
+            <Button variant="ghost" leadingIcon={Shield} onClick={() => navigate('/app/mailboxes/health')}>
+              Sending health
             </Button>
-          ) : null
+            {canWrite ? (
+              <Button
+                variant="primary"
+                leadingIcon={Mail}
+                onClick={() => openConnect(null)}
+              >
+                Connect mailbox
+              </Button>
+            ) : null}
+          </>
         }
       />
 

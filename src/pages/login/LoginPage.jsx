@@ -5,7 +5,6 @@ import { PasswordField, TextField } from '../../components/Field'
 import { ArrowLeft, ArrowRight, Check, Clock, Inbox, Send } from '../../components/icons'
 import { api, ApiError } from '../../lib/api'
 import { consumeSessionExpired, saveSession } from '../../lib/auth'
-import { createMfaChallenge, getMfaStatus, hasEnabledMfa } from '../../lib/mfa'
 import { usePageTitle } from '../../lib/usePageTitle'
 import { validateLogin } from '../../lib/validation'
 import '../../styles/auth.css'
@@ -66,26 +65,13 @@ export function LoginPage() {
         tenant_slug: values.tenantSlug.trim() || null,
       })
 
-      saveSession(tokenPair)
-
-      // Development-only MFA gateway. The API login response has no MFA state,
-      // so a locally enrolled account is challenged after the password step.
-      if (import.meta.env.DEV && hasEnabledMfa()) {
-        try {
-          const profile = await api.me()
-          const mfaStatus = getMfaStatus(profile?.user?.id)
-          if (mfaStatus.enabled) {
-            const challenge = createMfaChallenge(profile.user.id)
-            navigate(`/mfa/challenge?challenge=${encodeURIComponent(challenge.id)}`, {
-              replace: true,
-            })
-            return
-          }
-        } catch {
-          // MFA is optional; a failed status check must not block sign-in.
-        }
+      if (tokenPair?.mfa_required) {
+        const path = tokenPair.setup_required ? '/mfa/setup' : '/mfa/challenge'
+        navigate(`${path}?challenge=${encodeURIComponent(tokenPair.challenge_id)}`, { replace: true })
+        return
       }
 
+      saveSession(tokenPair)
       navigate('/app', { replace: true })
     } catch (error) {
       if (error instanceof ApiError) {

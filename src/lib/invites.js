@@ -3,11 +3,8 @@ import { api, ApiError } from './api'
 /**
  * Invitation adapter.
  *
- * The design specifies `POST /invites` and `POST /invites/:token/accept`, with
- * 7-day signed invitations. The current API build has no invite routes, so
- * development builds use a local invitation store under `reyvo.invites.v1` and
- * expose clearly labelled tools for creating valid, expired, and accepted demo
- * links. Production builds call the API and surface an honest unavailable error.
+ * Server invitations use single-use random tokens stored only as hashes. Local
+ * development fixtures remain available for the invitation state previews.
  */
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -19,7 +16,8 @@ const UNAVAILABLE_MESSAGE =
   'Invitations are not available on this API build yet. Ask the workspace owner to add you once the endpoint ships.'
 
 function isMissingEndpoint(error) {
-  return error instanceof ApiError && (error.status === 404 || error.status === 405)
+  return error instanceof ApiError &&
+    (error.status === 405 || (error.status === 404 && error.code !== 'not_found'))
 }
 
 function unavailable() {
@@ -141,12 +139,16 @@ function normalizeApiInvite(data) {
     issuedAt: data?.created_at ? Date.parse(data.created_at) : null,
     expiresAt: data?.expires_at ? Date.parse(data.expires_at) : null,
     acceptedAt: data?.accepted_at ? Date.parse(data.accepted_at) : null,
+    accountExists: Boolean(data?.account_exists),
   }
 
   if (invite.acceptedAt || data?.status === 'accepted') {
     return { status: 'accepted', reason: 'accepted', invite }
   }
-  if (invite.expiresAt && invite.expiresAt < Date.now()) {
+  if (data?.status === 'revoked') {
+    return { status: 'invalid', reason: 'revoked', invite }
+  }
+  if (data?.status === 'expired' || (invite.expiresAt && invite.expiresAt < Date.now())) {
     return { status: 'expired', reason: 'expired', invite }
   }
   return { status: 'valid', reason: null, invite }
@@ -154,6 +156,9 @@ function normalizeApiInvite(data) {
 
 export async function loadInvite(token) {
   if (!token) return { status: 'invalid', reason: 'missing', invite: null }
+  if (import.meta.env.DEV && token.startsWith('dev_invite_')) {
+    return inspectDevInvite(token)
+  }
 
   try {
     const data = await api.getInvite(token)
@@ -171,7 +176,7 @@ export async function loadInvite(token) {
     if (error?.status === 410) {
       const code = String(error?.code ?? '').toLowerCase()
       return {
-        status: code.includes('accepted') ? 'accepted' : 'expired',
+        status: code.includes('accepted') ? 'accepted' : code.includes('revoked') ? 'invalid' : 'expired',
         reason: code || 'expired',
         invite: null,
       }
@@ -184,6 +189,7 @@ export async function loadInvite(token) {
 function inviteErrorStatus(error) {
   const code = String(error?.code ?? '').toLowerCase()
   if (code.includes('accepted')) return 'accepted'
+  if (code.includes('revoked')) return 'invalid'
   if (code.includes('expired') || error?.status === 410) return 'expired'
   if (code.includes('invalid') || error?.status === 400 || error?.status === 404) return 'invalid'
   return null
@@ -197,9 +203,13 @@ export async function acceptInvite(token, { fullName, password }) {
     })
   }
 
+  if (import.meta.env.DEV && token.startsWith('dev_invite_')) {
+    return acceptDevInvite(token)
+  }
+
   try {
     const data = await api.acceptInvite(token, {
-      full_name: String(fullName ?? '').trim(),
+      full_name: fullName ? String(fullName).trim() : null,
       password,
     })
     return { development: false, invite: normalizeApiInvite(data).invite }
@@ -214,6 +224,10 @@ export async function acceptInvite(token, { fullName, password }) {
     if (!import.meta.env.DEV) throw unavailable()
   }
 
+  return acceptDevInvite(token)
+}
+
+function acceptDevInvite(token) {
   const result = inspectDevInvite(token)
 
   if (result.status === 'expired') {

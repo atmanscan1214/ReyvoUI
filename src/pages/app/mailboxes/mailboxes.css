@@ -422,6 +422,170 @@
 
 /* Responsive --------------------------------------------------------------- */
 
+.mail-health__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 18px;
+}
+
+.mail-health__stat {
+  display: grid;
+  gap: 8px;
+  padding: 18px 20px;
+}
+
+.mail-health__stat span {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mail-health__stat strong {
+  font-size: clamp(1.6rem, 2vw, 2.1rem);
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.mail-health__stat--good strong {
+  color: var(--success-strong);
+}
+
+.mail-health__stat--warn strong {
+  color: var(--warning-strong, #b7791f);
+}
+
+.mail-health__stat--muted strong {
+  color: var(--ink-soft);
+}
+
+.mail-health__table-wrap {
+  /* position:relative makes this the containing block for the absolutely
+     positioned .visually-hidden header span — without it that span escapes
+     overflow:auto and stretches the page horizontally. */
+  position: relative;
+  overflow: auto;
+}
+
+.mail-health__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.mail-health__table th,
+.mail-health__table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.mail-health__table th {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mail-health__row--good {
+  background: rgba(54, 151, 101, 0.02);
+}
+
+.mail-health__row--warn {
+  background: rgba(210, 144, 37, 0.02);
+}
+
+.mail-health__row--danger {
+  background: rgba(209, 63, 63, 0.02);
+}
+
+.mail-health__mailbox {
+  display: grid;
+  gap: 4px;
+}
+
+.mail-health__mailbox span {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.mail-health__mailbox small {
+  color: var(--muted);
+}
+
+.mail-health__metric,
+.mail-health__reason {
+  display: grid;
+  gap: 3px;
+}
+
+.mail-health__metric strong,
+.mail-health__reason strong {
+  color: var(--ink);
+}
+
+.mail-health__metric span,
+.mail-health__reason span {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.mail-health__reason {
+  max-width: 260px;
+  min-width: 220px;
+}
+
+.mail-health__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.mail-health__action:hover {
+  text-decoration: underline;
+}
+
+.mail-health__empty {
+  padding: 26px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.mail-health__provider-error {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--danger);
+}
+
+.mail-health__provider-error svg {
+  position: relative;
+  top: 2px;
+  flex: none;
+}
+
+.mail-health__gap {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 18px;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.mail-health__gap svg {
+  flex: none;
+  margin-top: 3px;
+}
+
 @media (max-width: 768px) {
   .mail__grid {
     grid-template-columns: 1fr;
@@ -434,5 +598,15 @@
 
   .mail__provider-card .btn {
     justify-content: center;
+  }
+
+  .mail-health__summary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .mail-health__summary {
+    grid-template-columns: 1fr;
   }
 }

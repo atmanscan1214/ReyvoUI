@@ -421,6 +421,43 @@
   color: var(--muted) !important;
 }
 
+.security__audit-search {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.security__audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.security__audit-list li {
+  display: grid;
+  gap: 5px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.security__audit-list li > strong {
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.security__audit-list li > span,
+.security__audit-list li > time {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.security__audit-list .ui-badge {
+  vertical-align: middle;
+}
+
 @media (max-width: 960px) {
   .security-page {
     grid-template-columns: 1fr;

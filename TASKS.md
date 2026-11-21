@@ -1,7 +1,7 @@
 # Reyvo — Remaining Build Backlog
 
 Source of truth: `ReyvoAPI/ReyvoApi/Reyvo_Detailed_Design_Document.md`
-Last updated: 10 November 2026
+Last updated: 17 November 2026
 
 This backlog covers the **in-product application** described in §5 of the design document. The
 marketing site and auth entry pages already exist and are not repeated here.
@@ -172,11 +172,11 @@ marketing site and auth entry pages already exist and are not repeated here.
   - Invitations: `/invite/:token` shows the invited email, workspace, role, and inviter, accepts
     with a name, password, and terms, and covers **success**, **expired**, **invalid**, and
     **already-accepted** states; `/invite` without a token explains the flow.
-  - The API build has none of these endpoints. Development builds call the provisional paths first,
-    then fall back to single-use, correctly time-boxed records in `reyvo.passwordResets.v1`,
-    `reyvo.mfa.v1`, and `reyvo.invites.v1` with clearly labelled “Development only” links for every
-    state; production builds report the feature as unavailable instead of faking it. Documented in
-    `README.md` and `docs/API_CONTRACT.md`.
+  - Password-reset and MFA endpoints remain unavailable, so their development flows use
+    single-use, time-boxed records in `reyvo.passwordResets.v1` and `reyvo.mfa.v1` with clearly
+    labelled “Development only” links. Invitation creation and acceptance use the server API;
+    development-only invite fixtures remain visibly local and do not create server accounts.
+    Documented in `README.md` and `docs/API_CONTRACT.md`.
   - Verified end to end in the browser: requested a reset and opened the valid, expired, and
     replayed links; created, accepted, reused, and expired an invitation; enrolled MFA, was
     challenged at the next sign-in, submitted a wrong code (inline error), then verified and
@@ -216,7 +216,10 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Leads and audience
 
-- [x] **T11 — Companies** · L · deps: T07 · §5.2.1
+- [ ] **T11 — Companies** · L · deps: T07 · §5.2.1
+  - **Reopened 21 Nov 2026:** `CompaniesPage` still renders the six-record mock array and never
+    calls `/companies`; list search, filters, and pagination are fixture-only. Detail page and CRUD
+    adapters are live, so only the list wiring is outstanding.
   - List, filters, detail, create/edit/delete, notes, custom fields.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
   - Built on the live `/companies` CRUD API with no fallbacks: URL-synced search (300 ms debounce),
@@ -240,7 +243,10 @@ marketing site and auth entry pages already exist and are not repeated here.
     passes.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
 
-- [x] **T12 — Contacts** · L · deps: T07 · §5.2.1
+- [ ] **T12 — Contacts** · L · deps: T07 · §5.2.1
+  - **Reopened 21 Nov 2026:** `ContactsPage` still renders the mock contact array and never calls
+    `/contacts`; list search, filters, and pagination are fixture-only, and Export/Bulk update are
+    "coming soon" stubs. Detail page, form, and CRUD adapters are live.
   - List, filters, detail, create/edit/delete, statuses, tags, last contacted/replied.
   - Done when: a contact can be created manually and viewed with company context.
   - Built on the live `/contacts` CRUD API: URL-synced search (300 ms debounce), status filter,
@@ -497,156 +503,408 @@ marketing site and auth entry pages already exist and are not repeated here.
     archived, duplicate → draft copy, delete → removed, filtered empty state, member read-only
     (no actions, hints shown), 1440/1024/768/375 responsive with zero page overflow.
 
-- [ ] **T21 — Campaign wizard: audience and mailboxes** · M · deps: T16, T18 · §5.4.2
+- [x] **T21 — Campaign wizard: audience and mailboxes** · M · deps: T16, T18 · §5.4.2
   - Wizard shell, list/segment audience, included/excluded counts, healthy-inbox selection.
   - Done when: the estimated send count updates with exclusions and mailbox caps.
   - Audience selection reads the pending audience contract written by T16
     (`reyvo.campaignAudience.v1`, `src/lib/audience.js`): a list id (count from the API) or a saved
     segment definition (evaluated client-side over the contact snapshot).
+  - `/app/campaigns/new` is a 5-step wizard (Audience, Mailboxes, Sequence, Schedule, Review;
+    `CampaignWizardPage.jsx` + `src/lib/wizard.js`). At T21 time steps 3–5 rendered locked — the
+    sequence editor, schedule, and review arrived with T22–T24. Finishing at step 2 creates the
+    draft via `POST /campaigns` with the chosen audience and mailboxes and a placeholder first step
+    that the
+    sequence editor replaces. The campaigns list "New campaign" now opens the wizard; T20's seed
+    modal was removed. `createCampaign` (`campaigns.js`) was extended with
+    `audienceType`/`audienceId`/`contactIds`/`emailAccountIds` — list audiences post as
+    `audience_type: 'list'` + `audience_id`, segments resolve client-side to
+    `audience_type: 'contacts'` + contact ids (no `/segments` route in this build).
+  - No audience/exclusion endpoint exists in this API build, so the wizard composes the numbers in
+    the browser: list audiences page `/lists/{id}/contacts`; segment audiences evaluate the saved
+    definition over `loadAudienceSnapshot`; exclusions combine the suppression list, cross-campaign
+    enrollments (walks every campaign's `/enrollments`, capped 2000), and contact fields, counted
+    per contact by priority (suppressed → no email → already enrolled → recently contacted, 30-day
+    window) so the breakdown sums to the total. Estimate = included − excluded; capacity = Σ
+    selected inbox daily caps; first-day = min(net, capacity); first pass ≈ ceil(net/capacity) days.
+  - Mailboxes: `connected` selectable, `degraded` selectable with a warning, other health states
+    blocked with their reason; at least one inbox required before "Create draft campaign".
+  - Verified live as owner: stepper/name/audience options render; segment and list estimates both
+    124 included → 1 excluded ("Suppressed 1") → 123 estimated; pending "Use this audience" handoff
+    selects the list and recomputes; name validation blocks continue (2–255 chars); 2 connected +
+    1 blocked inbox cards with caps and warm-up stage; create without an inbox toasts "Select at
+    least one healthy inbox."; the send plan reacts to caps (400/day → first-day 123 ≈ 1 day; after
+    deselecting the 300/day inbox → 100/day, first-day 100 ≈ 2 days); create POST 201 → success
+    toast → campaigns list row "t21-wizard draft"; zero horizontal overflow at 375/768/1024/1440
+    (375: vertical stepper, stacked cards, full-width buttons); member role sees the "Ask an owner
+    or admin" notice and no wizard.
+  - Shared-kit fix found by the wizard screenshots: `.ui-stepper__copy` now has
+    `position: relative; z-index: 1; background: var(--paper)` so horizontal connector lines no
+    longer strike through step labels (the imports page shares the fix).
 
-- [ ] **T22 — Sequence editor and merge fields** · L · deps: T21 · §5.4.3, §5.4.4
+- [x] **T22 — Sequence editor and merge fields** · L · deps: T21 · §5.4.3, §5.4.4
   - 1–8 steps, business-day delays, subject/body, rich text + plain-text fallback, merge-field picker.
   - Done when: unknown fields block progress and fallbacks are visible in preview.
 
-- [ ] **T23 — Schedule step** · M · deps: T22 · §5.4.5
+- [x] **T23 — Schedule step** · M · deps: T22 · §5.4.5
   - Sending days, local window, timezone strategy, holiday skip, next-send preview.
   - Done when: the preview shows a correct local send time across DST-safe IANA zones.
 
-- [ ] **T24 — Review, preflight, preview, and test send** · L · deps: T23 · §5.4.9
+- [x] **T24 — Review, preflight, preview, and test send** · L · deps: T23 · §5.4.9
   - Preflight checklist with blocking explanations, per-contact preview, test-send action.
+  - Added a final review step to the campaign wizard that loads draft preflight state, shows any
+    blocking or warning reasons, and renders a sample contact preview across the campaign steps.
+  - The review UI includes a test-send action for the selected mailbox and blocks the final launch
+    button until the draft clears every preflight error.
   - Done when: launch is blocked with a specific reason until every preflight item passes.
 
-- [ ] **T25 — Approval workflow** · M · deps: T24 · §5.4.1
+- [x] **T25 — Approval workflow** · M · deps: T24 · §5.4.1
   - Submit, approve, reject with reason, return to draft, immutable approved copy view.
+  - Added owner/admin approval and rejection actions on the campaign list for the
+    `pending_approval` state, including a reason field that returns the campaign to draft.
+  - Role checks stay in place so non-owners/admins can only view campaign lifecycle hints.
   - Done when: role restrictions and audit entries are visible for each transition.
 
-- [ ] **T26 — Campaign detail, controls, and stats** · L · deps: T25 · §5.4.7, §5.8.3
+- [x] **T26 — Campaign detail, controls, and stats** · L · deps: T25 · §5.4.7, §5.8.3
   - Launch, pause, resume, archive, duplicate; progress, per-step stats, replies, bounces, opt-outs, errors.
+  - Added a dedicated campaign detail route and action surface with launch/pause/resume, archive, duplicate, and delete controls, along with a stats panel and per-step overview.
   - Done when: pause takes effect through the API and the UI shows held vs sent messages.
 
 ## AI drafting
 
-- [ ] **T27 — AI generate and regenerate panel** · M · deps: T22 · §5.5
+- [x] **T27 — AI generate and regenerate panel** · M · deps: T22 · §5.5
   - Generate subject/body, instruction input, used fields, assumptions, warnings, banned-claim errors.
+  - Added the sequence-step AI helper panel with a brief editor, generate/regenerate actions, apply-to-step flow, and refusal/error handling that keeps the existing draft intact.
   - Done when: failures and refusals offer retry and manual writing without losing the draft.
 
-- [ ] **T28 — AI approval, quota, and toggle** · M · deps: T27 · §5.5.5, §5.5.6
+- [x] **T28 — AI approval, quota, and toggle** · M · deps: T27 · §5.5.5, §5.5.6
   - Edit-then-approve, reject-with-reason, usage meter, 80% warning, tenant AI on/off.
+  - Added workspace-level AI toggle and approval-mode controls to the sequence editor, tracked local quota usage, and blocked launch when AI-generated copy is set to edit-then-approve.
   - Done when: AI copy cannot launch without the configured approval mode.
 
 ## Sending controls
 
-- [ ] **T29 — Sending health page** · M · deps: T19 · §5.3.4, §5.6.8
+- [x] **T29 — Sending health page** · M · deps: T19 · §5.3.4, §5.6.8
   - Per-inbox cap usage, warm-up, bounce/error rate, last successful send, auth status, reason codes.
-  - Done when: every health state explains what happened and what the user should do.
+  - `/app/mailboxes/health` (`MailboxHealthPage.jsx`) reads the live `/email-accounts` list and is
+    built on the fields `EmailAccountRead` actually returns: status badges, configured caps,
+    warm-up stage/start, last health check, the provider's `last_error` as the reason detail, and
+    per-state "what happened / what to do" guidance (`explainMailboxHealth` in `emailAccounts.js`,
+    which replaced the synthesized `summarizeMailboxHealth` — no invented rates).
+  - **Telemetry limits (named on the page):** this API build exposes no per-inbox send counters,
+    bounce/error rates, or last-successful-send timestamps, so those columns are absent and a note
+    says caps are configured limits, not observed usage. Empty state links to the mailboxes page.
+  - Done when: every health state explains what happened and what the user should do — met from
+    the real status + provider-error fields, within the API's telemetry limits.
 
-- [ ] **T30 — Pause, resume, and kill-switch controls** · M · deps: T26 · §5.6.12
+- [x] **T30 — Pause, resume, and kill-switch controls** · M · deps: T26 · §5.6.12
   - Tenant, campaign, and inbox pause/resume; admin global kill switch; confirmation for resume.
-  - Done when: controls are audited and the affected scope is obvious before confirming.
+  - **Live and audited.** Backend (ReyvoAPI, migration `f3a91c5d8e72`): `tenants.sending_paused_at`
+    + `POST /tenants/current/sending-pause` (owner/admin; send-only — sign-in and data access stay
+    available; audited `tenant.sending_paused`/`tenant.sending_resumed`), `email_accounts.is_paused`
+    via `PATCH /email-accounts/{id}`, and a `platform_settings` row behind
+    `GET/POST /admin/sending-controls` (platform staff only, audited
+    `admin.kill_switch_changed`). The sender skips the kill switch, paused tenants, and paused
+    inboxes. Frontend: `/app/admin` is the owner/admin "Sending controls" area (`navigation.js`
+    roles `['owner','admin']`, task T30 — it replaced the platform-gated T46 placeholder); every
+    control posts to the API, the confirm modal states the affected scope plus the exact audit
+    action, resume requires an acknowledgement, and API errors surface in the modal.
+    `src/lib/sendingControls.js` (localStorage) was deleted.
+  - Done when: controls are audited and the affected scope is obvious before confirming — verified
+    live end-to-end: `t30-api-check.mjs` (pause/resume cycles + audit rows + 403 for tenant roles
+    on the kill switch) and a two-pass browser harness (real UI login through the forced MFA setup
+    to engage/release the kill switch, then the owner-state flows at 375/768/1024/1440 with
+    overflow 0 and no console errors).
+  - Gaps: the kill-switch section shows "Platform staff only" for tenant roles (the API is 403
+    without `is_platform_admin`), and the backend forces MFA enrollment on every login for
+    platform admins — so the demo account stays non-admin and the switch is only editable through
+    a temporary staff session (harness-only, reverted after verification).
 
-- [ ] **T31 — Usage and quota warnings** · S · deps: T06 · §5.9.2
+- [x] **T31 — Usage and quota warnings** · S · deps: T06 · §5.9.2
   - Usage vs limits for sends, contacts, seats, inboxes, AI; banners at 80% and 100%.
-  - Done when: the limit that blocks an action is named and linked to the upgrade path.
+  - `/app/billing` (`BillingPage.jsx` + `src/lib/billing.js`) is live: usage comes from
+    `GET /tenants/current/usage`, limits from `GET /billing/plans`, and the current plan/state
+    from `GET /billing/subscription`; inbox usage counts the live `/email-accounts` list. Capped
+    meters (contacts, sending inboxes, daily send cap) get 80% warning and 100% blocked banners,
+    and the banner's upgrade action posts the real `POST /billing/checkout` for the next plan in
+    tier order — on this server that surfaces the API's own 503 ("Billing is not configured. Set
+    STRIPE_SECRET_KEY.") instead of a fake link.
+  - **Limits named on the page:** plan limits in this build cap contacts, inboxes, and the daily
+    send cap only — UsageRead has no message-volume meter or AI quota, so those usage fields are
+    shown as counts without invented limits. T40 adds provider-backed invoice history; portal
+    actions still require a configured billing account.
+  - Done when: the limit that blocks an action is named and linked to the upgrade path from the
+    live usage endpoint — met (verified with a temporarily lowered plan limit at 80% and 100%).
 
 ## Replies, tasks, and pipeline
 
-- [ ] **T32 — Unified inbox list and filters** · L · deps: T07 · §5.7.4
+- [x] **T32 — Unified inbox list and filters** · L · deps: T07 · §5.7.4
   - List/thread views; campaign, inbox, category, assignee, date, and status filters.
-  - Done when: unmatched replies and test replies are clearly separated.
+  - `/app/replies` (`RepliesPage.jsx` + `src/lib/replies.js`) reads the live `GET /replies` route:
+    category and review-state filters are server-side query params, campaign filtering is
+    server-side by id, and "Unmatched only" separates replies with no contact or no campaign
+    linkage (with badges on rows). Contact, campaign, and assignee names are mapped from the live
+    `/contacts`, `/campaigns`, and `/tenants/current/members` lists (first 100 each). The Reader
+    tab renders the sanitized snippet (`sanitizeReplyHtml` moved into the adapter, now running on
+    live content); pagination loads 100 rows at a time.
+  - **Gaps named on the page:** `ReplyRead` has no inbox/mailbox field, no message bodies or
+    thread history, and no date filter parameter — so there is no inbox filter, no full thread,
+    and no date filter (received date is shown). Assignee/search filtering is client-side over
+    the loaded page. There is no `GET /replies/{id}`; the detail page walks list pages to find a
+    reply (capped 5 pages).
+  - Done when: unmatched replies and test replies are clearly separated from live data — met (the
+    fake `test` category and demo fixtures are gone; unmatched replies are badged and filterable).
 
-- [ ] **T33 — Conversation view and actions** · L · deps: T32 · §5.7.4
+- [x] **T33 — Conversation view and actions** · L · deps: T32 · §5.7.4
   - Thread, contact/company context, campaign, assign, note, task, suppress, stop sequence, open in provider.
-  - Done when: HTML is sanitized and remote content is blocked by default.
+  - `/app/replies/:replyId` (`ReplyDetailPage.jsx`) shows the live reply (located by walking list
+    pages — there is no `GET /replies/{id}`), the sanitized snippet, and facts (contact/campaign
+    links, assignee, confidence, classified-by). Actions write through to the API:
+    `PATCH /replies/{id}` reclassifies / flags for review / reassigns (the form re-syncs from the
+    PATCH response, and `classified_by` flips to `user`), a contact note appends through
+    `PATCH /contacts/{id}` (`appendContactNote` merges with existing notes — there is no notes
+    sub-resource), a follow-up task is created via `POST /tasks` (`src/lib/tasks.js`, new:
+    list/create/update, real `TaskStatus` + priorities), and suppression goes through
+    `POST /suppressions` with the real `SuppressionReason` enum (`addSuppression` now takes a
+    `reason`). The page checks the live suppression list first and shows an "already blocked"
+    state plus a header badge instead of double-blocking (a duplicate returns 409).
+  - **Gaps named on the page:** `ReplyRead` exposes a snippet only — no message bodies or thread
+    history, so there is no full conversation. Stop-sequence and "open in provider" are not
+    buildable: `message_id` is an internal UUID, not a provider message id.
+  - Done when: HTML is sanitized and remote content is blocked **in the conversation view** and
+    the actions write through to the API — met (sanitizer runs on the snippet; all four actions
+    verified live and re-fetched).
 
-- [ ] **T34 — Classification and assignment** · M · deps: T33 · §5.7.3
+- [x] **T34 — Classification and assignment** · M · deps: T33 · §5.7.3
   - Category badges, confidence, needs-review, manual correction, assignee.
-  - Done when: corrections are saved and reflected in reporting.
+  - All live on the replies inbox (`RepliesPage.jsx`): rows carry the real category badge,
+    confidence, needs-review and unmatched badges, and the classify-by source. Needs-review rows
+    get a one-click **Approve** (`PATCH /replies/{id}` with `needs_review: false`) that updates
+    the row, the stat cards, and the header badges in place. The Reader tab has an inline
+    correction form (category, assignee, needs-review) that PATCHes and replaces the row — a
+    category correction flips `classified_by` to `user` on the backend and clears the review
+    flag, and a **Corrections** stat card counts rows with `classified_by === 'user'` so
+    corrections are reflected. Assignee filtering is client-side over the loaded page; full
+    assignment/correction detail lives on the reply detail page (T33).
+  - **Gaps named:** the backend ignores `assigned_to: null` in `ReplyUpdate`, so an assignment
+    cannot be cleared, only changed; corrections are stored on the reply, but there is no
+    evaluation/report endpoint for them beyond the counter.
+  - Done when: corrections are saved and reflected in reporting — met (verified live: approve
+    2→1 review rows, correction sets category/assignee/`classified_by: user`, Corrections 0→1).
 
-- [ ] **T35 — Tasks** · M · deps: T33 · §5.7.5
+- [x] **T35 — Tasks** · M · deps: T33 · §5.7.5
   - List, create, assign, due date, priority, status, contact/opportunity links.
-  - Done when: overdue and completed tasks are distinguishable.
+  - `/app/tasks` (`TasksPage.jsx`) reads the live `GET /tasks` list: status filtering is a
+    server-side query param (refetch), search/priority/assignee filter the loaded page (page size
+    capped at 100). Real `TaskStatus` badges (open/in_progress/completed/canceled) plus derived
+    **Overdue** and **Due today** badges make overdue and completed tasks distinguishable in live
+    data. The composer creates tasks through `POST /tasks` (`src/lib/tasks.js`: title, due
+    datetime, priority, assignee, contact, opportunity) and the row status select PATCHes through
+    `PATCH /tasks/{id}`. Rows link to the live contact record and pipeline opportunity;
+    enrichment comes from `/contacts`, `/opportunities` (`src/lib/opportunities.js`, new minimal
+    adapter), and `/tenants/current/members` (first 100 each).
+  - **Gaps named on the page:** there is no `DELETE /tasks/{id}` — tasks are completed or
+    canceled, never removed, and a note says so. Completed/canceled are excluded from overdue.
+  - Done when: overdue and completed tasks are distinguishable in live data — met (verified live
+    with seeded overdue/completed/canceled tasks, a status PATCH, and a composer create).
 
-- [ ] **T36 — Pipeline board and table** · L · deps: T33 · §5.7.5
+- [x] **T36 — Pipeline board and table** · L · deps: T33 · §5.7.5
   - Fixed stages, drag-and-drop, value/owner/source/aging, won/lost reason.
-  - Done when: stage changes are confirmed, audited, and recoverable from an error.
+  - **Live.** `PipelinePage.jsx` reads `GET /opportunities` (normalized via the
+    `listOpportunities` adapter) plus the server-side `GET /opportunities/pipeline` summary, and
+    enriches cards with contacts, companies, campaigns, and tenant members. Stage changes —
+    drag-and-drop, the per-card Advance button, or the stage select — go through a confirm step
+    and then `PATCH /opportunities/{id}`; a failed PATCH keeps the opportunity where it was and
+    offers retry (verified with a forced 500). "Undo last stage change" issues a real PATCH back
+    to the previous stage. Won/Not-interested moves require a reason, stored on the
+    opportunity's `notes`. The audit trail panel reads
+    `GET /tenants/current/audit-logs?action=opportunity.updated`, which the backend writes with
+    before/after stage data on every move. Table view shows contact/company/stage/owner/value/
+    source/age/close date with links to contact detail.
+  - **Gaps named:** the API has no dedicated won/lost-reason field (reason lives in `notes`,
+    labelled as such on the page) and no configurable reason list; opportunities are not
+    created or deleted from this page (list endpoints only) — they come from replies/task flows
+    or the API.
+  - Done when: stage changes are confirmed, audited, and recoverable from an error — met
+    (verified live: drag new→contacted + confirm, undo restored the stage via a real PATCH, a
+    forced-500 PATCH left the card in place with a retry that succeeded, a Won move demanded a
+    reason and stored it in notes, and the audit trail showed all four before/after entries).
 
-- [ ] **T37 — Opportunity detail and activity timeline** · M · deps: T36 · §5.7.5
+- [x] **T37 — Opportunity detail and activity timeline** · M · deps: T36 · §5.7.5
   - Company, contact, stage, value, owner, close date, notes; combined send/reply/task/meeting timeline.
-  - Done when: the timeline is chronological and links back to source records.
+  - **Live.** `OpportunityDetailPage.jsx` reads `GET /opportunities/{id}` (new `fetchOpportunity`
+    adapter helper) and enriches contact/company/owner/campaign labels. Stage changes go through
+    the same confirm step as the board (`PATCH /opportunities/{id}`; Won/Not-interested require a
+    reason stored in `notes`), and notes save via PATCH. The activity tab assembles the timeline
+    from every observable source in this API build: `opportunity.created` and `opportunity.updated`
+    audit entries for the entity (from `GET /tenants/current/audit-logs`, filtered client-side by
+    `entity_id`), the linked contact's replies (list-filtered client-side — replies have no
+    `contact_id` query param), and tasks linked to the opportunity or contact (tasks list has no
+    opportunity filter either). Entries are sorted newest-first and reply/task entries link back to
+    `/app/replies/{id}` and `/app/tasks`.
+  - **Gaps named on the page:** this API build records no individual sends (no messages endpoint)
+    and no meetings entity (a meeting materializes as the Meeting stage), and note edits are not
+    audited — the page states these are omitted rather than faked. The audit endpoint filters by
+    `action` only, so per-entity filtering is client-side; a notes-only PATCH is logged with an
+    unchanged stage and is filtered out of stage-change entries.
+  - Done when: the timeline is chronological and links back to source records — met (verified live
+    with a seeded opportunity that had three audited stage moves, a reply, and a task: all six
+    entries rendered newest-first in the right order, the Won move demanded a reason and appeared
+    in the timeline after a reload, and overflow is 0 at 1024/768/375).
 
 ## Reporting
 
-- [ ] **T38 — Dashboard overview** · L · deps: T12, T26 · §5.8.3
+- [x] **T38 — Dashboard overview** · L · deps: T12, T26 · §5.8.3
   - Sends, replies, positive replies, meetings, opt-outs, active campaigns, inbox health.
-  - Done when: date range and timezone are explicit and "delivered" is labelled not observable.
+  - **Live.** `DashboardPage.jsx` reads `GET /dashboard/summary` for every metric it exposes
+    (sends total/7d/today, replies total/7d + positive 7d, meetings, open opportunities +
+    pipeline value, contacts, campaigns, open tasks, per-stage pipeline rows, and the
+    server-computed top campaigns). Inbox health comes from the live `/email-accounts` list
+    (healthy/attention split + up to five rows, shared `explainMailboxHealth` logic), and
+    opt-outs come from the live `/suppressions` total because the summary endpoint has no
+    opt-out field (stated on the card).
+  - **Windows honesty:** the endpoint accepts no date-range or timezone parameter — all-time,
+    7-day, and today windows are computed server-side (`as_of` date shown). The page presents
+    those windows explicitly and offers no selectable range. "Delivered is not observable" and
+    "no open tracking" stay in the definitions panel.
+  - Done when: date range and timezone are explicit and "delivered" is labelled not observable
+    **from live summary data** — met (verified live: metrics matched the API cross-check, and
+    seeding one meeting-stage opportunity + one task flipped Meetings 0→1, Open opportunities
+    0→1, Open tasks 0→1 on reload; test data removed afterwards; overflow 0 at 1024/768/375).
 
-- [ ] **T39 — Campaign, inbox, and pipeline reports + export** · L · deps: T38 · §5.8.3, §5.8.4
+- [x] **T39 — Campaign, inbox, and pipeline reports + export** · L · deps: T38 · §5.8.3, §5.8.4
   - Per-step performance, audience/exclusions, progress, errors; inbox health; pipeline by stage/owner.
-  - Done when: CSV export uses the same injection protection as contact export.
+  - Live `ReportsPage.jsx`: summary metrics and per-campaign rows from the campaigns list +
+    `GET /campaigns/{id}/stats` (first 25), replies counted client-side from two list pages
+    (capped-page note shown when `total` exceeds them), mailbox health from `/email-accounts`
+    via `explainMailboxHealth`, opt-outs from the `/suppressions` total, and pipeline by
+    stage/owner/age from `/opportunities/pipeline` plus a client-side opportunity page for
+    age/owner splits. The CSV export keeps the contact-export injection protection
+    (`csvCell` prefixing + BOM) and now runs on the live rows. This API build has no aggregate
+    reports endpoint and no date-range/timezone parameter, so windows are labelled all-time
+    server-side; per-step, error-rate, and per-campaign opt-out breakdowns and "delivered"
+    (not observable) are named as gaps instead of faked columns.
+  - Done when: CSV export uses the same injection protection as contact export **and the rows come
+    from live endpoints** — met (verified live: campaign and pipeline rows matched the API
+    cross-check, CSV blob had BOM + header + 7 data rows, overflow 0 at 1024/768/375, no console
+    errors; test data removed afterwards).
 
 ## Billing
 
 - [ ] **T40 — Subscription, usage, checkout, and portal** · L · deps: T06 · §5.10
   - Current plan, seats, usage, upgrade/downgrade, Checkout, Customer Portal, invoices.
-  - Done when: past-due, grace-period, canceled, and downgrade-blocked states are all represented.
+  - Implemented the UI and API flow: `/app/billing` reads plans, subscription, usage and paginated
+    provider invoices; active subscriptions can change plans, with server-side usage checks;
+    payment-failure webhooks persist a seven-day grace deadline, and the sender pauses at expiry.
+    `GET /billing/invoices` and `POST /billing/plan-change` are implemented and covered by mocked
+    API tests.
+  - **Non-Stripe verification done** (harness `t40-flow.mjs` + `t40-seed.py`): baseline probes
+    plans/subscription/usage/invoices all 200, checkout and plan-change 503 (`no configured
+    Stripe price`), portal 400 (`no billing account yet`) — and the portal button surfaces that
+    API error verbatim. Seeded subscription rows verify every UI state live: grace period (badge
+    + deadline copy), past due (grace expired), canceled, and downgrade-blocked (starter disabled
+    with "4 contacts (limit 1)" + server `409 downgrade_blocked` with matching blockers), then
+    restored to the original trial row and re-verified. Overflow 0 at 375/768/1024/1440, no JS
+    errors. Stripe secrets and plan prices are not configured in the local API, so real Checkout,
+    Portal-session, invoice-list, and webhook round-trips remain unverified.
+  - Done when: past-due, grace-period, canceled, and downgrade-blocked states are all represented
+    against a real billing provider (needs Stripe credentials and plan price IDs on the backend).
+    Keep T40 pending until that real-provider smoke test passes; the non-Stripe behavior above is
+    verified and T41 is independent and complete.
 
 ## Settings and notifications
 
-- [ ] **T41 — Workspace settings and sending defaults** · M · deps: T06 · §5.11
+- [x] **T41 — Workspace settings and sending defaults** · M · deps: T06 · §5.11
   - Agency name, physical address, timezone, default window, caps, signature, retention, AI toggle.
-  - Done when: the physical address is enforced before campaign launch.
+  - `/app/settings` is implemented in its own `src/pages/app/settings/` folder and saves to
+    `GET/PATCH /tenants/current`. Workspace timezone, default sending window, and campaign cap are
+    inherited by new campaigns; the default signature is appended when an inbox has no signature;
+    assistant-chat retention is applied by the cleanup worker; workspace AI drafting policy gates
+    campaign generation. Campaign preflight and launch reject workspaces without a street, city,
+    postal code, and country.
+  - Done when: the physical address is enforced before campaign launch — covered by the campaign
+    API tests.
 
-- [ ] **T42 — Team management** · M · deps: T06 · §5.11
+- [x] **T42 — Team management** · M · deps: T06 · §5.11
   - Invite, resend, revoke, change role, remove; last-owner protection.
+  - `/app/settings/team` lives in its own `src/pages/app/team/` folder. It lists members and
+    invitations, supports role changes, invitation create/resend/revoke, member removal, link
+    copying, and recent team-access audit history.
+  - The API stores only invitation-token hashes, expires links after seven days, validates existing
+    account passwords when joining another workspace, and audits invitation and membership changes.
+    SMTP sends links when configured; otherwise the UI reports that delivery is unavailable and
+    exposes the generated link for manual sharing.
+  - Role changes and removals are owner-only; admins may invite, resend, and revoke member-role
+    invitations but cannot grant elevated roles. The API locks active owners and prevents demoting
+    or removing the last owner. Removed memberships are retained as inactive records for audit and
+    historical attribution.
   - Done when: every role change is audited and the last owner cannot be removed or demoted.
 
-- [ ] **T43 — Security settings and audit log** · M · deps: T10 · §5.9.4
+- [x] **T43 — Security settings and audit log** · M · deps: T10 · §5.9.4
   - Password, MFA, active sessions, tenant audit search and export.
+  - `/app/settings/security` uses the dedicated `src/pages/app/security/` folder. Password changes
+    verify the current password; MFA uses encrypted server-side TOTP secrets, single-use login
+    challenges, attempt limits, and mandatory setup for platform administrators. Sessions are
+    server-tracked and revocable, including immediate access-token invalidation.
+  - Tenant owners/admins can search and export filtered audit events. Platform administrator
+    actions carry an explicit actor type and appear in the tenant-scoped log and CSV export.
+  - Focused security API tests cover session revocation, password changes, MFA enrollment/login,
+    required platform-admin setup, and safe audit export.
   - Done when: support/admin actions are visible to the tenant owner.
 
-- [ ] **T44 — Notifications** · M · deps: T04 · §5.7.6
+- [x] **T44 — Notifications** · M · deps: T04 · §5.7.6
   - Bell dropdown, unread state, per-user preferences, tenant defaults, digest opt-in.
   - Done when: no email notification includes full message content.
 
 - [ ] **T45 — Data export, workspace deletion, import reports** · M · deps: T14 · §5.11
+  - **Reopened 21 Nov 2026:** no UI exists. `GET /tenants/current/export`, `DELETE /tenants/current`
+    and `GET /contacts/export` are never called. The export endpoint currently returns **500** on
+    the live server, so it needs a backend fix before the export path can ship.
   - Export workspace, 30-day delete confirmation, download completed import reports.
   - Done when: destructive actions require owner confirmation and offer an export first.
 
 ## Platform admin
 
 - [ ] **T46 — Tenant management console** · L · deps: T07 · §5.9.1
+  - **Reopened 21 Nov 2026:** no platform-staff console exists. All nine `/admin/tenants*`
+    operations (list, profile, suspend, reactivate, trial extend, plan change, credit, MFA reset,
+    force logout, delete) are unused.
   - Search by name/slug/owner/plan/status; tenant profile, usage, inboxes, campaigns, health, MRR.
+  - Note: the old `/app/admin` placeholder was reassigned to T30 ("Sending controls",
+    owner/admin) — T46 must add its own platform-staff route and nav area.
   - Done when: suspend, reactivate, trial extension, plan change, credit, MFA reset, force logout, flags work.
 
 - [ ] **T47 — Platform usage, health, audit, support, abuse** · L · deps: T46 · §5.9.2–§5.9.6
+  - **Reopened 21 Nov 2026:** no platform usage/health/audit UI exists. `GET /admin/audit-logs` is
+    unused, and `/app/status` calls a non-existent `/api/v1/status` instead of `/health` +
+    `/health/ready`.
   - Usage and limits; queue/provider/API health; audit search; time-boxed support access; abuse signals and kill switches.
   - Done when: support access requires a reason, expires automatically, and is visible to the tenant.
 
 ## Public pages
 
-- [ ] **T48 — Unsubscribe page** · M · deps: T03 · §5.12
+- [x] **T48 — Unsubscribe page** · M · deps: T03 · §5.12
   - Signed-token validation, agency name, GET confirmation, idempotent POST, expired/invalid states.
   - Done when: the page works signed out and records the opt-out exactly once.
 
-- [ ] **T49 — Status page and security.txt** · S · deps: none · §5.12
+- [x] **T49 — Status page and security.txt** · S · deps: none · §5.12
   - Public status page (Phase 2 style placeholder is fine) and `/.well-known/security.txt`.
   - Done when: both are reachable and linked from the footer where appropriate.
 
 ## Cross-cutting quality
 
-- [ ] **T50 — API client and data/form layer** · M · deps: T03
+- [x] **T50 — API client and data/form layer** · M · deps: T03
   - Pagination, filtering, retries, idempotency keys, abort handling, query cache, form state.
   - Done when: no screen hand-rolls fetch or duplicates error parsing.
 
-- [ ] **T51 — Test setup and critical E2E flows** · L · deps: T03
+- [x] **T51 — Test setup and critical E2E flows** · L · deps: T03
   - Unit tests for validation/API mapping; E2E for register → onboarding → import → campaign → reply.
   - Done when: `npm test` and the E2E suite run in CI.
 
-- [ ] **T52 — Accessibility and responsive audit** · M · deps: T04–T47
+- [x] **T52 — Accessibility and responsive audit** · M · deps: T04–T47
   - Keyboard, focus, contrast, landmarks, labels, table semantics, mobile tables/kanban.
   - Done when: app routes pass Lighthouse accessibility and manual keyboard checks.
 
-- [ ] **T53 — Documentation, env, and seed data** · S · deps: T03
+- [x] **T53 — Documentation, env, and seed data** · S · deps: T03
   - Update README with app routes, mock mode, env vars, seed fixtures, and test commands.
   - Done when: a new developer can run and demo the app from a clean checkout.
 

@@ -304,18 +304,17 @@ export const APP_AREAS = {
   },
   admin: {
     path: 'admin',
-    label: 'Platform admin',
-    title: 'Platform admin',
+    label: 'Sending controls',
+    title: 'Sending controls',
     icon: Shield,
-    task: 'T46',
-    platformAdmin: true,
+    task: 'T30',
+    roles: ['owner', 'admin'],
     description:
-      'The platform team’s tenant console. Visible only to accounts with the platform-admin flag.',
+      'Pause and resume workspace sending, campaigns, and mailboxes — plus the platform kill switch for staff.',
     bullets: [
-      'Search tenants by name, slug, owner, plan, and status.',
-      'Tenant profile, usage, mailboxes, campaigns, health, and MRR.',
-      'Suspend, reactivate, extend a trial, change plan, or apply a credit.',
-      'Time-boxed support access that requires a reason and is visible to the tenant.',
+      'Workspace pause with a reason that is recorded in the audit log; sign-in and data stay available.',
+      'Pause or resume individual campaigns and mailboxes from one list, with the affected scope confirmed first.',
+      'The global kill switch is enforced by the sender and editable only by platform staff; tenant roles see a staff-only panel.',
     ],
   },
 }

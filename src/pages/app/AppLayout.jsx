@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Logo } from '../../components/Logo'
 import {
   ArrowRight,
@@ -19,6 +19,11 @@ import {
   Users,
 } from '../../components/icons'
 import { useSession } from '../../lib/session'
+import {
+  metaFor,
+  notificationsApi,
+  timeAgo,
+} from '../../lib/notifications'
 import {
   buildOnboardingSteps,
   summarizeOnboarding,
@@ -97,6 +102,11 @@ export function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [openMenu, setOpenMenu] = useState(null)
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [bellItems, setBellItems] = useState([])
+  const [bellState, setBellState] = useState('idle')
+
+  const navigate = useNavigate()
 
   const setup = useSetupData()
   const setupSteps = useMemo(
@@ -205,6 +215,75 @@ export function AppLayout() {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [workspaceOpen])
+
+  // Unread badge: refresh on mount, when the menu closes, and after actions.
+  useEffect(() => {
+    const controller = new AbortController()
+    notificationsApi
+      .unreadCount()
+      .then((data) => setUnreadCount(Number(data?.count) || 0))
+      .catch(() => {
+        // A failed badge refresh must never break the shell.
+      })
+    return () => controller.abort()
+  }, [])
+
+  // Fetch the latest few notifications each time the bell opens.
+  useEffect(() => {
+    if (openMenu !== 'notifications') return undefined
+    let cancelled = false
+    setBellState('loading')
+    notificationsApi
+      .list({ limit: 6 })
+      .then((page) => {
+        if (cancelled) return
+        setBellItems(Array.isArray(page?.items) ? page.items : [])
+        setBellState('ready')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setBellState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [openMenu])
+
+  async function markBellRead(item) {
+    if (item.read_at) {
+      setOpenMenu(null)
+      navigate(item.link || '/app/notifications')
+      return
+    }
+    try {
+      const updated = await notificationsApi.markRead(item.id)
+      setBellItems((current) =>
+        current.map((row) => (row.id === updated.id ? { ...row, read_at: updated.read_at } : row)),
+      )
+      setUnreadCount((current) => Math.max(0, current - 1))
+      setOpenMenu(null)
+      navigate(item.link || '/app/notifications')
+    } catch {
+      // Still follow the link; the feed offers another way to mark read.
+      setOpenMenu(null)
+      navigate(item.link || '/app/notifications')
+    }
+  }
+
+  async function markBellAllRead() {
+    try {
+      const result = await notificationsApi.markAllRead()
+      setUnreadCount(0)
+      setBellItems((current) =>
+        current.map((row) => (row.read_at ? row : { ...row, read_at: new Date().toISOString() })),
+      )
+      if (result?.updated) {
+        // Badge already zeroed; nothing else to surface here.
+      }
+    } catch {
+      // The feed page surfaces the error toast if the user retries there.
+    }
+  }
 
   function closeDrawer(restoreFocus = false) {
     setDrawerOpen(false)
@@ -462,13 +541,20 @@ export function AppLayout() {
             <button
               ref={bellRef}
               type="button"
-              className={`app-icon-btn${openMenu === 'notifications' ? ' is-open' : ''}`}
+              className={`app-icon-btn app-icon-btn--bell${openMenu === 'notifications' ? ' is-open' : ''}`}
               aria-expanded={openMenu === 'notifications'}
               aria-controls="app-notifications"
               onClick={() => toggleMenu('notifications')}
             >
               <Bell size={19} />
-              <span className="visually-hidden">Notifications</span>
+              {unreadCount > 0 ? (
+                <span className="app-icon-btn__badge" aria-hidden="true">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              ) : null}
+              <span className="visually-hidden">
+                Notifications{unreadCount > 0 ? `, ${unreadCount} unread` : ''}
+              </span>
             </button>
 
             <button
@@ -493,27 +579,93 @@ export function AppLayout() {
             {openMenu === 'notifications' ? (
               <div className="app-menu app-menu--notifications" id="app-notifications">
                 <div className="app-menu__head">
-                  <p className="app-menu__title">Notifications</p>
-                  <Link
-                    to="/app/notifications"
-                    className="app-menu__head-link"
-                    onClick={() => setOpenMenu(null)}
-                  >
-                    Preferences
-                  </Link>
-                </div>
-                <div className="app-menu__empty">
-                  <span className="app-menu__empty-icon" aria-hidden="true">
-                    <Bell size={18} />
-                  </span>
-                  <p>
-                    <strong>You’re all caught up.</strong>
+                  <p className="app-menu__title">
+                    Notifications
+                    {unreadCount > 0 ? (
+                      <span className="app-menu__count">{unreadCount} unread</span>
+                    ) : null}
                   </p>
-                  <p className="app-menu__muted">
-                    Reply alerts, bounce spikes, and quota warnings will appear here once those
-                    pipelines are live.
-                  </p>
+                  {unreadCount > 0 ? (
+                    <button
+                      type="button"
+                      className="app-menu__head-link app-menu__head-link--btn"
+                      onClick={markBellAllRead}
+                    >
+                      Mark all read
+                    </button>
+                  ) : (
+                    <Link
+                      to="/app/notifications"
+                      className="app-menu__head-link"
+                      onClick={() => setOpenMenu(null)}
+                    >
+                      View all
+                    </Link>
+                  )}
                 </div>
+
+                {bellState === 'loading' ? (
+                  <div className="app-menu__empty" role="status">
+                    <p className="app-menu__muted">Loading notifications…</p>
+                  </div>
+                ) : bellState === 'error' ? (
+                  <div className="app-menu__empty" role="alert">
+                    <p>
+                      <strong>Couldn’t load notifications.</strong>
+                    </p>
+                    <p className="app-menu__muted">Open the notifications page to retry.</p>
+                  </div>
+                ) : bellItems.length === 0 ? (
+                  <div className="app-menu__empty">
+                    <span className="app-menu__empty-icon" aria-hidden="true">
+                      <Bell size={18} />
+                    </span>
+                    <p>
+                      <strong>You’re all caught up.</strong>
+                    </p>
+                    <p className="app-menu__muted">
+                      Campaign completions, imports, quota warnings, and billing issues will
+                      appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="app-menu__list">
+                    {bellItems.map((item) => {
+                      const meta = metaFor(item.type)
+                      const Icon = meta.icon
+                      const unread = !item.read_at
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={`app-menu__notif${unread ? ' is-unread' : ''}`}
+                            onClick={() => markBellRead(item)}
+                          >
+                            <span
+                              className={`app-menu__notif-icon app-menu__notif-icon--${meta.tone}`}
+                              aria-hidden="true"
+                            >
+                              <Icon size={14} />
+                            </span>
+                            <span className="app-menu__notif-copy">
+                              <span className="app-menu__notif-title">
+                                {item.title}
+                                {unread ? (
+                                  <span className="app-menu__notif-dot" aria-label="Unread" />
+                                ) : null}
+                              </span>
+                              <span className="app-menu__notif-summary">{item.summary}</span>
+                              <span className="app-menu__notif-time">
+                                {timeAgo(item.created_at)}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+
                 <Link
                   to="/app/notifications"
                   className="app-menu__footer"

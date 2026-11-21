@@ -111,12 +111,12 @@ export async function listSuppressions(
   }
 }
 
-export async function addSuppression({ email, note } = {}, signal) {
+export async function addSuppression({ email, reason = 'manual', note } = {}, signal) {
   const data = await api.post(
     '/suppressions',
     {
       email: String(email ?? '').trim(),
-      reason: 'manual',
+      reason: String(reason ?? 'manual').trim() || 'manual',
       note: String(note ?? '').trim() || null,
     },
     { signal },

@@ -31,7 +31,6 @@ import {
   getAccountState,
   loadSessions,
   requestEmailChange,
-  resetDevSessions,
   revokeAllSessions,
   revokeOtherSessions,
   revokeSession,
@@ -559,7 +558,7 @@ function PasswordPanel({ user, account, onAccountChange, onSessionsChanged }) {
     } catch (caught) {
       if (caught?.fieldErrors?.new_password) {
         setErrors({ newPassword: caught.fieldErrors.new_password })
-      } else if (caught?.status === 401) {
+      } else if (caught?.code === 'current_password_invalid') {
         setErrors({ currentPassword: 'That password isn’t right. Try again.' })
       } else {
         setFormError(caught?.message || 'We could not change your password. Try again.')
@@ -664,14 +663,6 @@ function PasswordPanel({ user, account, onAccountChange, onSessionsChanged }) {
           Last password change in this browser: {formatDateTime(account.passwordChangedAt)}
         </p>
       ) : null}
-
-      {import.meta.env.DEV ? (
-        <DevNote>
-          The API build has no password-change endpoint. Development verifies the current password
-          against the live login route, records the change in <code>reyvo.account.v1</code>, and
-          revokes other demo sessions — but it cannot rotate the server password.
-        </DevNote>
-      ) : null}
     </div>
   )
 }
@@ -747,12 +738,6 @@ function SessionsPanel({ user }) {
     }
   }
 
-  async function handleResetDemo() {
-    const result = await resetDevSessions(user)
-    setSessions(result.sessions)
-    setStatus('ready')
-  }
-
   const otherCount = sessions.filter((session) => !session.current).length
 
   const dialogCopy = (() => {
@@ -808,11 +793,6 @@ function SessionsPanel({ user }) {
           <p>
             Signing out everywhere clears this list. Sign in again to create a fresh session.
           </p>
-          {import.meta.env.DEV ? (
-            <Button variant="ghost" size="sm" onClick={handleResetDemo}>
-              Reset demo sessions
-            </Button>
-          ) : null}
         </div>
       ) : (
         <>
@@ -879,14 +859,6 @@ function SessionsPanel({ user }) {
           </div>
         </>
       )}
-
-      {import.meta.env.DEV ? (
-        <DevNote>
-          The API build has no session endpoints. Development keeps this list in{' '}
-          <code>reyvo.sessions.v1</code>; revoking a session updates the local list, and “sign out
-          everywhere” clears every saved workspace on this device.
-        </DevNote>
-      ) : null}
 
       {pendingAction && dialogCopy ? (
         <ConfirmDialog

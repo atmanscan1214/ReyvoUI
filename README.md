@@ -47,7 +47,7 @@ From the `ReyvoAPI` repository:
 uv run uvicorn reyvo.main:app --reload --loop reyvo.dev:selector_loop_factory
 ```
 
-The API should answer on <http://localhost:8000>, and its CORS config already allows
+The API should answer on <http://127.0.0.1:8000>, and its CORS config already allows
 `http://localhost:5173`.
 
 ### Production build
@@ -64,7 +64,7 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | Variable                 | Default     | Purpose                                                              |
 | ------------------------ | ----------- | -------------------------------------------------------------------- |
 | `VITE_API_URL`           | `/api/v1`   | Base URL used by the API client. Use a full URL for a deployed API.  |
-| `VITE_API_PROXY_TARGET`  | `http://localhost:8000` | Dev-only proxy target for `/api`.                       |
+| `VITE_API_PROXY_TARGET`  | `http://127.0.0.1:8000` | Dev-only proxy target for `/api`.                  |
 
 ## Routes
 
@@ -80,7 +80,7 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/welcome`  | Setup checklist     | Live onboarding checklist: five steps derived from the API, with readiness and progress |
 | `/welcome/address` | Mailing address | Required physical address form wired to `PATCH /tenants/current` |
 | `/verify-email` | Verify email    | Verification status, auto-verify from a token, and resend (provisional; see below) |
-| `/app`      | Dashboard           | Authenticated shell; placeholder overview until T38           |
+| `/app`      | Dashboard           | Live `GET /dashboard/summary` metrics, pipeline-by-stage, server-computed top campaigns, live inbox health + suppression count; windows are server-side (no range/timezone param), delivered is not observable |
 | `/app/settings/security` | Security | Two-factor enrollment, disable, and the password-reset entry point |
 | `/app/settings/account` | Account | Profile, email change, password change, and active sessions |
 | `/app/companies` | Companies | Live company list with search, industry filter, pagination, and create |
@@ -91,9 +91,20 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/lists` | Lists & segments | Live static lists, browser-side AND/OR segments with a live count preview, dev-only tags, and a campaign-audience handoff |
 | `/app/suppressions` | Suppressions | Live suppression list with reason filter, manual blocking, override rules, and import exclusion |
 | `/app/mailboxes` | Mailboxes | Live mailbox list with health badges, reconnect prompts, and the OAuth connect flow |
+| `/app/mailboxes/health` | Sending health | Live account states/caps/warm-up with per-state guidance and provider errors; no per-inbox telemetry exists in this API build (named on the page) |
 | `/app/mailboxes/:mailboxId` | Mailbox detail | Sending identity, configuration modal with cap validation, warm-up panel, test send, and disconnect |
-| `/app/campaigns` | Campaigns | Live campaign list with lifecycle badges, search/status filters, create, submit, duplicate, archive, and delete |
-| `/app/*`    | App areas           | Replies, pipeline, settings, admin, and the rest of `APP_AREAS` |
+| `/app/campaigns` | Campaigns | Live campaign list with lifecycle badges, search/status filters, create, submit, duplicate, archive, delete, approve, and reject |
+| `/app/campaigns/new` | Campaign wizard | Full 5-step creation wizard: audience, mailboxes, sequence, schedule, review/preflight |
+| `/app/campaigns/:campaignId` | Campaign detail | Live detail with launch/pause/resume, archive/duplicate/delete, approval gating, and stats |
+| `/app/replies` | Replies inbox | Live `GET /replies` list with server-side category/review/campaign filters, unmatched separation, pagination, a sanitized reader, one-click review approval, and an inline correction form (`PATCH`) with a corrections counter |
+| `/app/replies/:replyId` | Reply detail | Live reply with working actions — reclassify/flag/assign (`PATCH`), contact note (via contact update), follow-up task (`POST /tasks`), suppress (`POST /suppressions`); no thread bodies exist in this build, and stop-sequence/open-in-provider are blocked |
+| `/app/tasks` | Task queue | Live `GET /tasks` list with server-side status filter, real status badges plus derived Overdue/Due-today, working create (`POST`) and status changes (`PATCH`), live contact/opportunity links; no delete exists in the API |
+| `/app/pipeline` | Pipeline | Live stage board and table over `GET /opportunities` + `/opportunities/pipeline`; stage moves PATCH, confirm, audit, undo |
+| `/app/pipeline/:opportunityId` | Opportunity detail | Live `GET /opportunities/{id}` facts + confirm-guarded stage moves and notes PATCH; activity timeline from audit entries, replies, and tasks (sends/meetings not recorded in this API build) |
+| `/app/reports` | Reports | Live report tables (campaign stats, replies, mailbox health, pipeline) plus a real client-side CSV export with injection protection |
+| `/app/billing` | Billing | Live usage vs plan limits with 80%/100% banners, real checkout/portal/plan-change posts, and paginated invoices; without Stripe, checkout/plan-change answer 503 and portal 400 (surfaced as-is), and billing history is an empty-state note |
+| `/app/admin` | Sending controls | Owner/admin: workspace pause, campaign and mailbox pause/resume on audited API endpoints; kill switch is platform-staff only (403 panel for tenant roles) |
+| `/app/*`    | App areas           | Team, settings, notifications, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
 | `/privacy`  | Privacy Policy      | Static legal copy                                            |
@@ -101,12 +112,39 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 
 The `/app` shell owns the sidebar, top bar, notification and account menus, mobile drawer, skip
 link, and profile loading/error states. Every backlog area has a routed placeholder, so navigation
-never leads to a dead end. Role-restricted links (billing, team, security, platform admin) appear
-only when `/auth/me` reports the matching role or platform-admin flag.
+never leads to a dead end. Role-restricted links (billing, team, security, sending controls) appear
+only when `/auth/me` reports the matching role.
 
 Restricted routes are also guarded. Opening one directly shows a shared access-denied screen with the
 current workspace, role, and required role instead of rendering the page. The guard waits for the
 profile request, shows a retry state if it fails, and never assumes denial while access is unknown.
+
+### Demo-grade screens
+
+A second batch of screens was built as visual demos on top of fixture data while their endpoints
+are unavailable or not yet wired. `vulnerabilities.md` tracks the full live-endpoint audit.
+
+- **Contacts list** (`/app/contacts`) and **Companies list** (`/app/companies`) still render
+  hard-coded fixture arrays. Their adapters (`lib/contacts.js`, `lib/companies.js`) and detail
+  pages are live, and the lists ask the API for nothing — so search, filters, and pagination in
+  those two list views do not reflect workspace data yet.
+- **Workspace export / deletion** (T45) and the **platform admin console** (T46/T47:
+  `/admin/tenants*`, `/admin/audit-logs`) have no UI yet. `docs/openapi.json` exposes them.
+- **Billing** (`/app/billing`) reads live usage, plans, subscription, and paginated invoices and
+  posts real checkout/portal/plan-change requests. Without a configured Stripe key or plan price,
+  checkout and plan-change answer 503 and the portal answers 400 — each surfaced as-is from the
+  API, never simulated. The trial/grace/past-due/canceled and downgrade-blocked states are
+  verified against the live backend; only the provider round-trips (real Checkout, Customer Portal
+  session, invoice list from Stripe) await credentials — flagged in `TASKS.md`.
+- **Admin sending controls** (`/app/admin`) are live: workspace pause (`POST
+  /tenants/current/sending-pause`), campaign pause/resume, and mailbox pause all post to the API
+  and are audited. Only the global kill switch is staff-only — `/admin/sending-controls` answers
+  403 for tenant roles, so the page shows a "Platform staff only" panel instead of the control.
+- **AI settings and quota** (wizard) are browser-local (`localStorage`), while the generate call
+  itself hits the live `POST /ai/draft`.
+
+Treat these screens as placeholders: `TASKS.md` should keep them unchecked until they consume live
+data.
 
 ## Folder layout
 
@@ -116,7 +154,7 @@ Each page owns a folder, including its stylesheet:
 src/
   components/        Shared UI: header, footer, logo, form fields, icons
     ui/              Product UI kit + ui.css (table, filters, dialogs, toasts, …)
-  lib/               API client, session storage, validation, timezone data
+  lib/               API client, session storage, validation, timezone data, wizard estimates, sending controls, tasks/opportunities adapters
   pages/
     home/            HomePage.jsx + home.css
     register/        RegisterPage.jsx
@@ -133,8 +171,15 @@ src/
       imports/       ImportsPage + imports.css (CSV upload, mapping, duplicate modes, report, rollback)
       lists/         ListsPage, SegmentBuilder, ListDetailView, TagManager, ListFormModal, ContactSelectionModal + lists.css
       suppressions/  SuppressionsPage + suppressions.css (block modal, override rules, reason filter)
-      mailboxes/     MailboxesPage, MailboxDetailPage + mailboxes.css (health cards, connect modal, config form, test send)
-      campaigns/     CampaignsPage + campaigns.css (lifecycle table, create modal, per-state actions)
+      mailboxes/     MailboxesPage, MailboxDetailPage, MailboxHealthPage + mailboxes.css (health cards, connect modal, config form, test send, sending-health summary)
+      campaigns/     CampaignsPage + campaigns.css (lifecycle table, per-state actions, approve/reject), CampaignWizardPage + wizard.css (full 5-step wizard), CampaignDetailPage (launch/pause/resume, stats)
+      dashboard/     DashboardPage + dashboard.css (live summary, pipeline by stage, inbox health; server-side windows)
+      replies/       RepliesPage, ReplyDetailPage + replies.css (live list, server filters, unmatched split, sanitized snippets, working actions)
+      tasks/         TasksPage + tasks.css (live task queue: server status filter, create, status PATCH, overdue/completed split)
+      pipeline/      PipelinePage, OpportunityDetailPage + pipeline.css (live board/table and detail; confirm + audited + undoable stage moves, timeline from audit/replies/tasks)
+      reports/       ReportsPage + reports.css (live reports, real CSV export)
+      billing/       BillingPage + billing.css (live usage vs plan limits; checkout/portal blocked without Stripe)
+      admin/         AdminPage + admin.css (live lists + audited pause/kill-switch controls)
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -145,7 +190,7 @@ src/
   main.jsx           Entry point
 docs/
   API_CONTRACT.md    Auth, errors, pagination, endpoint map
-  openapi.json       Captured OpenAPI 3.1 schema (62 paths)
+  openapi.json       Captured OpenAPI 3.1 schema (109 paths)
 scripts/
   sync-openapi.mjs   Refreshes docs/openapi.json from a running API
 ```
@@ -154,17 +199,20 @@ scripts/
 
 `src/lib/api.js` is the single place that talks to the backend. It:
 
-- reads the base URL from `VITE_API_URL`;
-- sends and parses JSON;
-- unwraps the backend error envelope
-  `{ error: { code, message, details: { errors }, request_id } }`;
+- reads the base URL from `VITE_API_URL`; sends and parses JSON;
+- unwraps the backend error envelope `{ error: { code, message, details: { errors }, request_id } }`;
 - maps FastAPI validation errors (`details.errors[].loc`) onto form fields;
 - turns network failures and 502/504 responses into a human message instead of "Failed to fetch";
-- refreshes the access token before expiry and once on a `401`, shares one refresh across
-  concurrent requests, and clears the session only when the refresh token itself is rejected;
+- refreshes the access token before expiry and once on a `401`, shares one refresh across concurrent requests,
+  and clears the session only when the refresh token itself is rejected;
 - exposes `api.get`, `api.post`, `api.postForm`, `api.patch`, and `api.delete` so product screens never
   call `fetch` directly. `postForm` sends `FormData` without forcing a JSON content type, so the
-  browser can set the multipart boundary for CSV upload.
+  browser can set the multipart boundary for CSV upload;
+- provides pagination helpers: `api.list(path, options)` and `api.search(path, filter, options)`;
+- provides query caching via `cacheQuery(key, fn)`, with `api.invalidateCache(key)` and `api.clearCache()`;
+- generates idempotency keys via `generateIdempotencyKey()` for safe retries;
+- exports `ApiError`, `ErrorCodes`, `PaginationOptions`, `RetryConfig`, `isRetryableStatus`, `isRetryableError`,
+  `PaginatedResponse`, and `onSessionExpired()` for use in product code.
 
 `onSessionExpired()` lets the app shell send the user to `/login` with a clear "session expired"
 notice when a refresh is rejected.
@@ -395,8 +443,8 @@ evaluation, and the contact snapshot, `src/lib/tags.js` owns tag aggregation and
   rows, so the rules are applied by reason.
 - **Import exclusion** — the import review step (T14) reads the suppression list and visibly marks
   suppressed rows as "Suppressed · never uploaded", both in the counts and per row. The campaign
-  wizard (T21) will show the exclusions in its audience counts; the server already blocks sends to
-  suppressed addresses.
+  wizard (T21) counts suppressed contacts in its audience exclusions; the server already blocks
+  sends to suppressed addresses.
 - **Permissions** — owner/admin write; members view everything with a Read-only badge, a notice
   banner, and no write controls. The API has no RBAC on this route, so this is UI policy.
 
@@ -451,13 +499,11 @@ SMTP registration (a Phase 2 option per §5.3.1) is not surfaced yet.
 - **Clear next step per state** — each row shows exactly what can move it forward: draft rows
   offer Submit for approval and Delete (behind a confirm dialog), pending/approved/active/paused
   rows show a muted hint pointing at the approval workflow (T25) and the campaign detail (T26),
-  completed rows offer Archive and Duplicate, and archived rows offer Duplicate. Approving,
-  rejecting, launching, pausing, and resuming are not on this page by design — the lifecycle
-  table in §5.4.1 assigns them to the review workflow and detail page, which arrive later.
-- **Create** — the New-campaign modal seeds a draft with a name and a first step (subject +
-  body). Audience type, mailboxes, extra steps, and scheduling are the wizard's job (T21+), so
-  the modal keeps client-side validation for the three fields and maps server errors inline.
-  Create posts `audience_type: "contacts"` with empty ids — the API allows that for a draft.
+  completed rows offer Archive and Duplicate, and archived rows offer Duplicate. Approve and
+  reject live on this page for `pending_approval` rows — reject asks for a reason and returns
+  the campaign to draft. Launching, pausing, and resuming stay on the detail page per §5.4.1.
+- **Create** — "New campaign" opens the wizard at `/app/campaigns/new` (T21), which owns the
+  audience, mailboxes, and draft creation; see the next section. The seed modal from T20 is gone.
 - **Duplicate** — the API has no duplicate endpoint, so the page composes one from
   `GET /campaigns/{id}` + `POST /campaigns`, copying the name with " (copy)", steps, audience
   ids, mailboxes, timezone, sending window, caps, and stop-on-reply. The copy lands as a draft.
@@ -468,8 +514,53 @@ SMTP registration (a Phase 2 option per §5.3.1) is not surfaced yet.
   hints with no action buttons. The API has no RBAC on this route, so this is UI policy.
 
 `src/lib/campaigns.js` owns the campaign API adapter: the lifecycle status metadata (labels,
-tones, next-action verbs), normalization, list/create/get/duplicate/submit/archive/delete
-helpers, and the create payload shape.
+tones, next-action verbs), normalization, list/create/get/duplicate/submit/approve/reject/
+launch/pause/resume/archive/delete, preflight, preview, per-step stats, AI-draft helpers, and
+the create payload shape.
+
+### Campaign detail
+
+`/app/campaigns/:campaignId` (`CampaignDetailPage.jsx`) is the lifecycle action surface from
+§5.4.7: launch, pause, and resume post the live transitions (launch is blocked while the draft
+has preflight errors or when AI copy is set to edit-then-approve), archive, duplicate, and
+delete sit behind confirm dialogs, and the stats panel reads `GET /campaigns/{id}/stats` with a
+per-step overview. The API's bulk send loop is still a skeleton, so enrollment progress may not
+advance in this build.
+
+### Campaign wizard
+
+`/app/campaigns/new` (`CampaignWizardPage.jsx` + `src/lib/wizard.js`) is the full creation wizard
+from §5.4.2: five steps — Audience, Mailboxes, Sequence, Schedule, Review.
+
+- **Audience** — one static list or one saved segment per campaign. Lists come from the API with
+  their contact counts; segments come from the browser store (`reyvo.segments.v1`, written by the
+  lists page) and evaluate client-side over the contact snapshot. The pending pick handed over
+  from Lists & segments (`reyvo.campaignAudience.v1`) appears as a banner and pre-selects itself.
+  There is no audience/exclusion endpoint in this build, so the wizard composes the numbers in the
+  browser: exclusions combine the suppression list, cross-campaign enrollments (walks every
+  campaign's `/enrollments`, capped 2,000), and contact fields, counted per contact by priority
+  (suppressed → no email → already enrolled → recently contacted, 30-day window) so the breakdown
+  sums to the total. Estimate = included − excluded; counts are labelled as estimates when capped.
+- **Mailboxes** — connected inboxes are selectable, degraded ones selectable with a warning, and
+  other health states are blocked with their reason; at least one inbox is required before the
+  draft can be created. The send plan shows daily capacity (Σ selected inbox caps), first-day
+  sends, and ≈ days for the first pass, and it recomputes live as inboxes are toggled or the
+  audience changes.
+- **Sequence** — 1–8 steps with business-day delays. Subjects and bodies are HTML with a
+  merge-field picker (`{{first_name}}`, `{{company_name}}`, …); unknown merge fields are listed
+  as blocking issues before the draft can be created, and a plain-text fallback preview renders
+  under the editor. An AI helper panel drafts subject/body through the live `POST /ai/draft`.
+- **Schedule** — sending days, a local start/end window, a timezone strategy, and optional
+  holiday skip. The next-send preview computes real IANA-zone times with DST math
+  (`toTimeZoneParts`/`zonedTimeToUtc` in the page), and the whole schedule posts as
+  `sending_window`.
+- **Review** — creates the draft (`POST /campaigns` with the audience, mailboxes, steps, and
+  schedule), then reads `GET /campaigns/{id}/preflight`, renders blocking reasons, previews a
+  sample contact per step through `POST /preview`, and offers a test send through the mailbox
+  test endpoint. The launch button stays blocked until preflight clears.
+- **Permissions** — owner/admin build; members get the "Ask an owner or admin" notice and no
+  wizard, matching the campaigns list policy. AI approval mode and quota usage are browser-local
+  (`localStorage`), not tenant settings.
 
 ### Imports
 

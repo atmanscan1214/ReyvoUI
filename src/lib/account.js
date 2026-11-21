@@ -6,14 +6,10 @@ import { api, ApiError } from './api'
  * The design specifies profile edits, an email change that requires the current
  * password plus verification of the new address, a password change that
  * invalidates sessions, and a session list with individual and global sign-out.
- * The current API build exposes only `GET /auth/me`.
+ * Profile and email changes still use development-only browser fallbacks.
  *
- * Development builds therefore try the provisional paths first, then fall back
- * to browser-scoped records under `reyvo.account.v1` and `reyvo.sessions.v1`.
- * The fallbacks use the live login endpoint to verify the current password so
- * the confirmation step is real, but they cannot rotate the server password or
- * deliver an email. Production builds report the feature as unavailable rather
- * than pretending the change reached the API.
+ * Password and session operations are server-backed. Development fallbacks
+ * remain only for profile/email features whose API routes are not implemented.
  */
 
 export const ACCOUNT_STORE_KEY = 'reyvo.account.v1'
@@ -198,7 +194,7 @@ export async function requestEmailChange(user, { email, currentPassword }) {
     }
   } catch (error) {
     if (!isMissingEndpoint(error)) {
-      if (error?.status === 401 || error?.status === 403) {
+      if (error?.code === 'current_password_invalid') {
         throw new ApiError('That password isn’t right. Try again.', {
           status: 401,
           code: 'current_password_invalid',
@@ -289,44 +285,30 @@ export function cancelEmailChange(userId) {
  */
 export async function changePassword(user, { currentPassword, newPassword }) {
   try {
-    await api.changePassword({
+    const data = await api.changePassword({
       current_password: currentPassword,
       new_password: newPassword,
     })
-    return { development: false, changedAt: Date.now(), revokedOthers: true }
+    return {
+      development: false,
+      changedAt: Date.parse(data?.changed_at) || Date.now(),
+      revokedOthers: Number(data?.revoked_sessions) > 0,
+    }
   } catch (error) {
-    if (!isMissingEndpoint(error)) {
-      if (error?.status === 401 || error?.status === 403) {
-        throw new ApiError('That password isn’t right. Try again.', {
-          status: 401,
-          code: 'current_password_invalid',
-        })
-      }
-      if (error?.fieldErrors?.new_password) {
-        throw new ApiError(error.fieldErrors.new_password, {
-          status: error.status,
-          code: error.code,
-          fieldErrors: error.fieldErrors,
-        })
-      }
-      throw error
+    if (error?.status === 401 || error?.status === 403) {
+      throw new ApiError('That password isn’t right. Try again.', {
+        status: 401,
+        code: 'current_password_invalid',
+      })
     }
-    if (!import.meta.env.DEV) {
-      throw unavailable('Password changes are not available on this API build yet.')
+    if (error?.fieldErrors?.new_password) {
+      throw new ApiError(error.fieldErrors.new_password, {
+        status: error.status,
+        code: error.code,
+        fieldErrors: error.fieldErrors,
+      })
     }
-  }
-
-  await assertCurrentPassword(user, currentPassword)
-
-  const changedAt = Date.now()
-  updateRecord(user.id, { passwordChangedAt: changedAt })
-  revokeOtherDevSessions(user.id, null, user.email)
-
-  return {
-    development: true,
-    changedAt,
-    revokedOthers: true,
-    serverEmail: accountRecord(user.id)?.serverEmail ?? user.email,
+    throw error
   }
 }
 
@@ -440,90 +422,21 @@ function normalizeApiSessions(data) {
 }
 
 export async function loadSessions(user, signal) {
-  try {
-    const data = await api.sessions(signal)
-    return { development: false, sessions: normalizeApiSessions(data) }
-  } catch (error) {
-    if (error?.name === 'AbortError') throw error
-    if (!isMissingEndpoint(error)) throw error
-    if (!import.meta.env.DEV) {
-      throw unavailable('Active-session review is not available on this API build yet.')
-    }
-  }
-
-  const sessions = ensureDevSessions(user.id, user.email).map((session) =>
-    session.current ? { ...session, lastActiveAt: Date.now() } : session,
-  )
-  return { development: true, sessions }
-}
-
-export function resetDevSessions(user) {
-  const store = readSessionStore()
-  store.users[user.id] = {
-    sessions: seedDevSessions(user.id, user.email),
-    seededAt: Date.now(),
-  }
-  writeSessionStore(store)
-  return loadSessions(user)
+  const data = await api.sessions(signal)
+  return { development: false, sessions: normalizeApiSessions(data) }
 }
 
 export async function revokeSession(user, sessionId) {
-  try {
-    await api.revokeSession(sessionId)
-    return { development: false, current: false }
-  } catch (error) {
-    if (!isMissingEndpoint(error)) throw error
-    if (!import.meta.env.DEV) {
-      throw unavailable('Session management is not available on this API build yet.')
-    }
-  }
-
-  const store = readSessionStore()
-  const record = store.users[user.id]
-  const target = record?.sessions?.find((session) => session.id === sessionId)
-  if (record?.sessions) {
-    record.sessions = record.sessions.filter((session) => session.id !== sessionId)
-    writeSessionStore(store)
-  }
-
-  return { development: true, current: Boolean(target?.current) }
+  const data = await api.revokeSession(sessionId)
+  return { development: false, current: Boolean(data?.current) }
 }
 
 export async function revokeOtherSessions(user) {
-  try {
-    await api.revokeAllSessions({ keep_current: true })
-    return { development: false }
-  } catch (error) {
-    if (!isMissingEndpoint(error)) throw error
-    if (!import.meta.env.DEV) {
-      throw unavailable('Session management is not available on this API build yet.')
-    }
-  }
-
-  const store = readSessionStore()
-  const record = store.users[user.id]
-  if (record?.sessions) {
-    record.sessions = record.sessions.filter((session) => session.current)
-    writeSessionStore(store)
-  }
-  return { development: true }
+  await api.revokeAllSessions({ keep_current: true })
+  return { development: false }
 }
 
 export async function revokeAllSessions(user) {
-  try {
-    await api.revokeAllSessions({ keep_current: false })
-    return { development: false }
-  } catch (error) {
-    if (!isMissingEndpoint(error)) throw error
-    if (!import.meta.env.DEV) {
-      throw unavailable('Session management is not available on this API build yet.')
-    }
-  }
-
-  const store = readSessionStore()
-  if (store.users[user.id]) {
-    store.users[user.id].sessions = []
-    writeSessionStore(store)
-  }
-  return { development: true }
+  await api.revokeAllSessions({ keep_current: false })
+  return { development: false }
 }

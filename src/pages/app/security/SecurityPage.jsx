@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { PageHeader, Badge, Button, useToast } from '../../../components/ui'
 import { TextField } from '../../../components/Field'
+import { AlertCircle, ArrowRight, CheckCircle, Lock, Refresh, Shield } from '../../../components/icons'
+import { api } from '../../../lib/api'
 import {
-  AlertCircle,
-  ArrowRight,
-  CheckCircle,
-  Lock,
-  Refresh,
-  Shield,
-} from '../../../components/icons'
-import {
-  MFA_CHALLENGE_TTL_MS,
   beginMfaEnrollment,
   cancelMfaEnrollment,
   confirmMfaEnrollment,
-  createMfaChallenge,
   disableMfa,
   generateTotp,
   getMfaStatus,
@@ -42,12 +34,18 @@ function formatDate(value) {
 export function SecurityPage() {
   usePageTitle('Security')
 
-  const navigate = useNavigate()
   const { toast } = useToast()
   const { user, isPlatformAdmin, profileStatus } = useSession()
 
   const [refreshKey, setRefreshKey] = useState(0)
-  const [status, setStatus] = useState(() => getMfaStatus(user?.id))
+  const [status, setStatus] = useState({
+    enabled: false,
+    enabledAt: null,
+    pending: false,
+    pendingExpiresAt: null,
+  })
+  const [statusError, setStatusError] = useState(null)
+  const [statusLoaded, setStatusLoaded] = useState(false)
 
   const [enrollment, setEnrollment] = useState(null)
   const [enrolling, setEnrolling] = useState(false)
@@ -65,9 +63,61 @@ export function SecurityPage() {
   const [disableError, setDisableError] = useState(null)
   const [disabling, setDisabling] = useState(false)
 
+  const [auditEntries, setAuditEntries] = useState([])
+  const [auditStatus, setAuditStatus] = useState('loading')
+  const [auditError, setAuditError] = useState(null)
+  const [auditSearchInput, setAuditSearchInput] = useState('')
+  const [auditSearch, setAuditSearch] = useState('')
+  const [auditOffset, setAuditOffset] = useState(0)
+  const [auditTotal, setAuditTotal] = useState(0)
+  const [auditRefresh, setAuditRefresh] = useState(0)
+  const [exportingAudit, setExportingAudit] = useState(false)
+  const [exportError, setExportError] = useState(null)
+
   useEffect(() => {
-    setStatus(getMfaStatus(user?.id))
+    if (!user?.id) return undefined
+
+    const controller = new AbortController()
+    setStatusError(null)
+    setStatusLoaded(false)
+    getMfaStatus(user.id, controller.signal)
+      .then((nextStatus) => {
+        setStatus(nextStatus)
+        setStatusLoaded(true)
+      })
+      .catch((error) => {
+        if (error?.name !== 'AbortError') {
+          setStatusError(error?.message || 'We could not load your MFA settings.')
+          setStatusLoaded(true)
+        }
+      })
+    return () => controller.abort()
   }, [user?.id, refreshKey])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const params = new URLSearchParams({ limit: '30', offset: String(auditOffset) })
+    if (auditSearch) params.set('search', auditSearch)
+    setAuditStatus('loading')
+    setAuditError(null)
+
+    api
+      .get(`/tenants/current/audit-logs?${params}`, { signal: controller.signal })
+      .then((page) => {
+        setAuditEntries((current) =>
+          auditOffset === 0 ? page.items ?? [] : [...current, ...(page.items ?? [])],
+        )
+        setAuditTotal(page.total ?? 0)
+        setAuditStatus('ready')
+      })
+      .catch((error) => {
+        if (error?.name === 'AbortError') return
+        setAuditError(error?.message || 'We could not load the workspace audit log.')
+        setAuditStatus('error')
+      })
+
+    return () => controller.abort()
+  }, [auditOffset, auditRefresh, auditSearch])
 
   // Keep the development helper code current while enrollment is open.
   useEffect(() => {
@@ -118,8 +168,48 @@ export function SecurityPage() {
     }
   }
 
-  function handleCancel() {
-    if (user?.id) cancelMfaEnrollment(user.id)
+  function submitAuditSearch(event) {
+    event.preventDefault()
+    setAuditEntries([])
+    setAuditOffset(0)
+    setAuditSearch(auditSearchInput.trim())
+  }
+
+  async function handleAuditExport() {
+    setExportingAudit(true)
+    setExportError(null)
+    const params = new URLSearchParams()
+    if (auditSearch) params.set('search', auditSearch)
+    const suffix = params.size ? `?${params}` : ''
+
+    try {
+      const file = await api.download(
+        `/tenants/current/audit-logs/export${suffix}`,
+      )
+      const url = URL.createObjectURL(file)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'tenant-audit.csv'
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      setExportError(error?.message || 'We could not export the audit log.')
+    } finally {
+      setExportingAudit(false)
+    }
+  }
+
+  async function handleCancel() {
+    if (user?.id) {
+      try {
+        await cancelMfaEnrollment(user.id)
+      } catch (error) {
+        setEnrollError(error?.message || 'We could not cancel MFA setup. Try again.')
+        return
+      }
+    }
     setEnrollment(null)
     setCode('')
     setConfirmError(null)
@@ -170,25 +260,6 @@ export function SecurityPage() {
     }
   }
 
-  function handleTestChallenge() {
-    if (!user?.id) return
-    const challenge = createMfaChallenge(user.id)
-    navigate(`/mfa/challenge?challenge=${encodeURIComponent(challenge.id)}`)
-  }
-
-  function handleDevChallenge(kind) {
-    if (!user?.id) return
-    if (kind === 'invalid') {
-      navigate('/mfa/challenge?challenge=not-a-valid-challenge')
-      return
-    }
-
-    const challenge = createMfaChallenge(user.id, {
-      ageMs: kind === 'expired' ? MFA_CHALLENGE_TTL_MS + 60_000 : 0,
-    })
-    navigate(`/mfa/challenge?challenge=${encodeURIComponent(challenge.id)}`)
-  }
-
   async function handleDisable() {
     if (!user?.id) return
     setDisableError(null)
@@ -222,7 +293,7 @@ export function SecurityPage() {
       <PageHeader
         eyebrow="Settings · Security"
         title="Security"
-        description="Protect your Reyvo account with a second factor and keep recovery actions close at hand. Workspace-wide policy and audit history follow in T43."
+        description="Protect your account with two-factor authentication, review active sessions, and search security-sensitive workspace activity."
         meta={
           <>
             <Badge tone={status.enabled ? 'success' : 'neutral'} dot>
@@ -260,8 +331,12 @@ export function SecurityPage() {
             </Badge>
           </header>
 
-          {profileStatus === 'loading' ? (
+          {profileStatus === 'loading' || !statusLoaded ? (
             <p className="security__loading">Checking your security settings…</p>
+          ) : statusError ? (
+            <p className="security__error" role="alert">
+              {statusError}
+            </p>
           ) : status.enabled ? (
             <>
               <dl className="security__facts">
@@ -283,47 +358,24 @@ export function SecurityPage() {
               </dl>
 
               <div className="security__actions">
-                <Button
-                  variant="primary"
-                  trailingIcon={ArrowRight}
-                  onClick={handleTestChallenge}
-                >
-                  Test sign-in challenge
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setDisableOpen((current) => !current)
-                    setDisableError(null)
-                  }}
-                >
-                  Turn off MFA
-                </Button>
+                {required ? (
+                  <p className="security__mini-note">
+                    MFA is required for platform administrators and cannot be disabled here.
+                  </p>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setDisableOpen((current) => !current)
+                      setDisableError(null)
+                    }}
+                  >
+                    Turn off MFA
+                  </Button>
+                )}
               </div>
 
-              {import.meta.env.DEV ? (
-                <div className="security__dev-actions">
-                  <p className="security__dev-actions-title">Development challenge states</p>
-                  <div className="security__dev-buttons">
-                    <button
-                      type="button"
-                      className="security__dev-btn"
-                      onClick={() => handleDevChallenge('expired')}
-                    >
-                      Expired challenge
-                    </button>
-                    <button
-                      type="button"
-                      className="security__dev-btn"
-                      onClick={() => handleDevChallenge('invalid')}
-                    >
-                      Invalid challenge
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {disableOpen ? (
+              {disableOpen && !required ? (
                 <div className="security__disable">
                   <p className="security__disable-title">
                     <AlertCircle size={16} aria-hidden="true" />
@@ -477,8 +529,8 @@ export function SecurityPage() {
                 Development
               </Badge>
               <span>
-                Enrollment is stored in this browser because the current API build has no MFA
-                endpoints. Production builds never keep a TOTP secret in localStorage.
+                The setup key is shown once and held only while this setup screen is open. Reyvo
+                stores an encrypted copy after confirmation.
               </span>
             </p>
           ) : null}
@@ -527,20 +579,82 @@ export function SecurityPage() {
             </Link>
           </section>
 
-          <section className="app-card" aria-labelledby="audit-heading">
+          <section className="app-card security__audit" aria-labelledby="audit-heading">
             <header className="security__mini-head">
               <span className="security__mini-icon" aria-hidden="true">
                 <Shield size={18} />
               </span>
               <h2 id="audit-heading">Audit log</h2>
             </header>
-            <p>
-              A searchable, exportable record of security-sensitive changes lands with the
-              workspace settings build (T43).
-            </p>
-            <p className="security__mini-note">
-              MFA enrollment, password resets, and session changes will be written there.
-            </p>
+            <p>Search security-sensitive workspace events, including actions by platform staff.</p>
+            <form className="security__audit-search" onSubmit={submitAuditSearch}>
+              <TextField
+                id="audit-search"
+                name="auditSearch"
+                label="Search audit log"
+                placeholder="Action, actor, or record ID"
+                value={auditSearchInput}
+                onChange={(event) => setAuditSearchInput(event.target.value)}
+                maxLength={255}
+              />
+              <div className="security__actions security__actions--tight">
+                <Button type="submit" variant="primary">
+                  Search
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  loading={exportingAudit}
+                  onClick={handleAuditExport}
+                >
+                  Export CSV
+                </Button>
+              </div>
+            </form>
+            {exportError ? (
+              <p className="security__error" role="alert">
+                {exportError}
+              </p>
+            ) : null}
+            {auditError ? (
+              <p className="security__error" role="alert">
+                {auditError}
+              </p>
+            ) : auditStatus === 'loading' && auditEntries.length === 0 ? (
+              <p className="security__loading">Loading audit events…</p>
+            ) : auditEntries.length === 0 ? (
+              <p className="security__mini-note">No matching audit events.</p>
+            ) : (
+              <>
+                <ol className="security__audit-list">
+                  {auditEntries.map((entry) => (
+                    <li key={entry.id}>
+                      <strong>{entry.action.replaceAll('.', ' · ').replaceAll('_', ' ')}</strong>
+                      <span>
+                        <Badge
+                          tone={entry.actor_type === 'platform_admin' ? 'warning' : 'neutral'}
+                          size="sm"
+                        >
+                          {entry.actor_type.replaceAll('_', ' ')}
+                        </Badge>
+                        {entry.entity_type ? ` · ${entry.entity_type}` : ''}
+                      </span>
+                      <time dateTime={entry.created_at}>{formatDateTime(entry.created_at)}</time>
+                    </li>
+                  ))}
+                </ol>
+                {auditEntries.length < auditTotal ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={auditStatus === 'loading'}
+                    onClick={() => setAuditOffset((offset) => offset + 30)}
+                  >
+                    Load older events
+                  </Button>
+                ) : null}
+              </>
+            )}
           </section>
         </aside>
       </div>

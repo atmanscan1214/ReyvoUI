@@ -76,6 +76,7 @@ export function InvitePage() {
 
   const strength = passwordStrength(values.password)
   const invite = inviteState.invite
+  const accountExists = Boolean(invite?.accountExists)
 
   const retry = useCallback(() => setAttempt((current) => current + 1), [])
 
@@ -91,15 +92,21 @@ export function InvitePage() {
     setFormError(null)
 
     const nextErrors = {}
-    if (!values.fullName.trim()) nextErrors.fullName = 'Enter your full name.'
-    else if (values.fullName.trim().length > 255) nextErrors.fullName = 'Use 255 characters or fewer.'
+    if (!accountExists) {
+      if (!values.fullName.trim()) nextErrors.fullName = 'Enter your full name.'
+      else if (values.fullName.trim().length > 255) {
+        nextErrors.fullName = 'Use 255 characters or fewer.'
+      }
 
-    const passwordError = validatePassword(values.password)
-    if (passwordError) nextErrors.password = passwordError
+      const passwordError = validatePassword(values.password)
+      if (passwordError) nextErrors.password = passwordError
 
-    if (!values.confirmPassword) nextErrors.confirmPassword = 'Re-enter your password.'
-    else if (values.confirmPassword !== values.password) {
-      nextErrors.confirmPassword = 'Passwords do not match.'
+      if (!values.confirmPassword) nextErrors.confirmPassword = 'Re-enter your password.'
+      else if (values.confirmPassword !== values.password) {
+        nextErrors.confirmPassword = 'Passwords do not match.'
+      }
+    } else if (!values.password) {
+      nextErrors.password = 'Enter your current Reyvo password.'
     }
 
     if (!values.terms) nextErrors.terms = 'Accept the terms to join this workspace.'
@@ -114,7 +121,7 @@ export function InvitePage() {
 
     try {
       const result = await acceptInvite(token, {
-        fullName: values.fullName,
+        fullName: accountExists ? null : values.fullName,
         password: values.password,
       })
       setInviteState({ status: 'success', invite: result.invite, development: result.development })
@@ -133,10 +140,10 @@ export function InvitePage() {
   const devTools = useMemo(
     () =>
       import.meta.env.DEV ? (
-        <DevPanel title="No invitation endpoint on this API build">
+        <DevPanel title="Development-only invitation fixtures">
           <p>
-            Invitations are stored in this browser for development. Create a link to exercise the
-            valid, expired, accepted, and invalid states.
+            These links are local fixtures, not workspace invitations. Use them only to preview
+            invitation states without changing server data.
           </p>
           <div className="flow__dev-actions">
             <button
@@ -327,7 +334,7 @@ export function InvitePage() {
             Welcome to the <em>team</em>.
           </>
         }
-        asideLead="Your account is ready. Sign in to open the workspace and finish setting up your sending details."
+        asideLead="Your account now has access. Sign in to open the workspace and finish setting up your sending details."
         asidePoints={[
           'Your role is waiting exactly as the owner set it',
           'The workspace stays isolated from other tenants',
@@ -346,7 +353,7 @@ export function InvitePage() {
           <p>
             {inviteState.invite?.tenantName
               ? `You joined ${inviteState.invite.tenantName} as ${inviteRoleLabel(inviteState.invite.role)}. Sign in to open it.`
-              : 'Sign in to open your new workspace.'}
+              : 'Sign in to open your workspace.'}
           </p>
 
           <FlowActions>
@@ -362,8 +369,8 @@ export function InvitePage() {
 
           {inviteState.development ? (
             <p className="flow__note">
-              Development only: the invitation was accepted in this browser because the API build
-              has no invite endpoint. No account was created on the server.
+              Development only: this local fixture was marked accepted in this browser. No
+              membership or account was created on the server.
             </p>
           ) : null}
         </FlowStatus>
@@ -379,7 +386,11 @@ export function InvitePage() {
           The next <em>seat</em> is yours.
         </>
       }
-      asideLead={`You were invited to join a Reyvo workspace. Set a password now and use it any time after the invitation expires in ${EXPIRY_LABEL}.`}
+      asideLead={
+        accountExists
+          ? 'Use your existing Reyvo password to add this workspace to your account.'
+          : `You were invited to join a Reyvo workspace. Set a password now and use it any time after the invitation expires in ${EXPIRY_LABEL}.`
+      }
       asidePoints={[
         'Your own login — never a shared password',
         'The role the workspace owner chose for you',
@@ -393,7 +404,9 @@ export function InvitePage() {
           {invite?.inviterName
             ? `${invite.inviterName} invited you to ${invite.tenantName}.`
             : `You’ve been invited to ${invite?.tenantName ?? 'a Reyvo workspace'}.`}{' '}
-          Set a password to accept.
+          {accountExists
+            ? 'Confirm your existing Reyvo password to accept.'
+            : 'Set a password to accept.'}
         </>
       }
     >
@@ -432,63 +445,69 @@ export function InvitePage() {
           </div>
         ) : null}
 
-        <TextField
-          id="fullName"
-          name="fullName"
-          label="Your full name"
-          placeholder="Dana Whitfield"
-          autoComplete="name"
-          value={values.fullName}
-          onChange={handleChange}
-          error={errors.fullName}
-          maxLength={255}
-        />
+        {!accountExists ? (
+          <TextField
+            id="fullName"
+            name="fullName"
+            label="Your full name"
+            placeholder="Dana Whitfield"
+            autoComplete="name"
+            value={values.fullName}
+            onChange={handleChange}
+            error={errors.fullName}
+            maxLength={255}
+          />
+        ) : null}
 
         <div>
           <PasswordField
             id="password"
             name="password"
-            label="Password"
-            placeholder="12+ characters"
-            autoComplete="new-password"
+            label={accountExists ? 'Current Reyvo password' : 'Password'}
+            placeholder={accountExists ? 'Your current password' : '12+ characters'}
+            autoComplete={accountExists ? 'current-password' : 'new-password'}
             value={values.password}
             onChange={handleChange}
             error={errors.password}
             maxLength={256}
           />
-          <div className="strength" aria-live="polite">
-            <div className="strength__bars" aria-hidden="true">
-              {[1, 2, 3, 4].map((bar) => (
-                <span
-                  key={bar}
-                  className={`strength__bar ${values.password && bar <= strength.score ? `is-on strength--${strength.score}` : ''}`}
-                />
-              ))}
+          {!accountExists ? (
+            <div className="strength" aria-live="polite">
+              <div className="strength__bars" aria-hidden="true">
+                {[1, 2, 3, 4].map((bar) => (
+                  <span
+                    key={bar}
+                    className={`strength__bar ${values.password && bar <= strength.score ? `is-on strength--${strength.score}` : ''}`}
+                  />
+                ))}
+              </div>
+              <p className="strength__text">
+                {values.password ? (
+                  <>
+                    Strength: <strong>{strength.label}</strong>
+                    {strength.hints.length > 0 ? ` — add ${strength.hints.join(', ')}.` : '.'}
+                  </>
+                ) : (
+                  'Use 12+ characters with a mix of letters, numbers and symbols.'
+                )}
+              </p>
             </div>
-            <p className="strength__text">
-              {values.password ? (
-                <>
-                  Strength: <strong>{strength.label}</strong>
-                  {strength.hints.length > 0 ? ` — add ${strength.hints.join(', ')}.` : '.'}
-                </>
-              ) : (
-                'Use 12+ characters with a mix of letters, numbers and symbols.'
-              )}
-            </p>
-          </div>
+          ) : null}
         </div>
 
-        <PasswordField
-          id="confirmPassword"
-          name="confirmPassword"
-          label="Confirm password"
-          placeholder="Repeat your password"
-          autoComplete="new-password"
-          value={values.confirmPassword}
-          onChange={handleChange}
-          error={errors.confirmPassword}
-          maxLength={256}
-        />
+        {!accountExists ? (
+          <PasswordField
+            id="confirmPassword"
+            name="confirmPassword"
+            label="Confirm password"
+            placeholder="Repeat your password"
+            autoComplete="new-password"
+            value={values.confirmPassword}
+            onChange={handleChange}
+            error={errors.confirmPassword}
+            maxLength={256}
+          />
+        ) : null}
 
         <CheckboxField
           id="terms"
@@ -519,8 +538,9 @@ export function InvitePage() {
         </button>
 
         <p className="flow__note">
-          Already have a Reyvo account? <Link to="/login">Sign in first</Link> and the invitation
-          will attach to it.
+          {accountExists
+            ? 'Your existing password stays unchanged.'
+            : <>Already have a Reyvo account? <Link to="/login">Sign in first</Link> and the invitation will attach to it.</>}
         </p>
       </form>
     </AuthFlowShell>

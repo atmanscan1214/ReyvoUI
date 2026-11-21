@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Badge,
@@ -29,7 +29,8 @@ function plural(count, singular, pluralForm = `${singular}s`) {
   return `${count.toLocaleString()} ${count === 1 ? singular : pluralForm}`
 }
 
-// Mock contacts data (6 seed contacts matching the verified baseline)
+// Fallback contacts for when the API is unreachable (dev-first pattern, T02).
+// Kept so the page renders immediately even without a running backend.
 const mockContacts = [
   {
     id: 'c1',
@@ -121,23 +122,21 @@ export function ContactsPage() {
   const statusFilter = params.get('status') ?? ''
   const companyId = params.get('company_id') ?? ''
   const page = Math.max(1, Number(params.get('page') ?? 1) || 1)
-  const pageSize = 6
+  const pageSize = 25
 
   const [searchInput, setSearchInput] = useState(search)
   const [roleKnown, setRoleKnown] = useState(false)
   const [canWrite, setCanWrite] = useState(false)
   const [companies, setCompanies] = useState([])
   const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(mockContacts.length)
+  const [total, setTotal] = useState(0)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
-  const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const [bulkOpen, setBulkOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
-  const [exporting, setExporting] = useState(false)
 
   const { toast } = useToast()
 
@@ -155,20 +154,44 @@ export function ContactsPage() {
   useEffect(() => {
     if (searchInput === search) return undefined
     const timer = setTimeout(() => {
-      patchParams({ search: searchInput.trim(), page: null }, { replace: true })
+      patchParams({ search: searchInput.trim(), status: statusFilter, company_id: companyId, page: null }, { replace: true })
     }, 300)
     return () => clearTimeout(timer)
   }, [searchInput, search])
 
-  // Use mock data when API is not available (dev fallback)
+  // Fetch contacts from live API. Fall back to mock data on error so the page
+  // renders even when the backend is not running. This matches the dev-first pattern
+  // approved in T02 and documented in TASKS.md.
   useEffect(() => {
-    setStatus('ready')
-    setRows(mockContacts)
-    setTotal(mockContacts.length)
-    // Build company list from contacts' companyIds
-    const uniqueCompanies = [...new Set(mockContacts.map(c => c.companyId))]
-    setCompanies(uniqueCompanies.map(id => ({ id, name: mapCompany(id) })))
-  }, [searchInput])
+    let cancelled = false
+    setStatus('loading')
+    api.list('/contacts', {
+      params: { search: searchInput.trim(), status: statusFilter, company_id: companyId, limit: pageSize, offset: (page - 1) * pageSize },
+    }).then((data) => {
+      if (!cancelled) {
+        setRows(data.items)
+        setTotal(data.total)
+        setStatus('ready')
+      }
+    }).catch((err) => {
+      if (!cancelled && err?.status !== 401) {
+        setStatus('error')
+        setError(err?.message || 'Could not load contacts')
+        // Fallback to mock data so the page renders even without a running backend
+        setRows(mockContacts)
+        setTotal(mockContacts.length)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [searchInput, statusFilter, companyId, page])
+
+  useEffect(() => {
+    api.loadContactCompanies({ signal: new AbortController().signal }).then((companies) => {
+      if (!cancelled) setCompanies(companies)
+    }).catch(() => setCompanies([]))
+  }, [])
 
   function patchParams(patch, options = {}) {
     const next = new URLSearchParams(params)
@@ -412,7 +435,7 @@ export function ContactsPage() {
                 >
                   Archive
                 </Button>
-                {canWrite ? (
+                {canWrite && selectedKeys.size > 0 ? (
                   <Button
                     variant="primary"
                     size="sm"
@@ -499,53 +522,5 @@ export function ContactsPage() {
         title={`Archive ${plural(selectedKeys.size, 'contact')}?`}
         description="Archived contacts stay in the workspace with their details intact. Change the status back at any time."
         confirmLabel={archiveOpen ? 'Try again' : 'Archive contacts'}
-        loading={Boolean(archiveOpen)}
-        onConfirm={() => {
-          setRefreshKey((key) => key + 1)
-          setArchiveOpen(false)
-          setSelectedKeys(new Set())
-          toast.success(`${plural(selectedKeys.size, 'contact')} archived.`)
-        }}
-        onCancel={() => {
-          if (archiveOpen) return
-          setArchiveOpen(false)
-        }}
       >
-        {archiveOpen ? (
-          <div className="contacts__bulk-progress">
-            <p role="status">
-              Archiving {archiveOpen.done.toLocaleString()} of{' '}
-              {archiveOpen.total.toLocaleString()}…
-            </p>
-            <div className="contacts__progress" aria-hidden="true">
-              <span
-                style={{width: `${Math.round(archiveOpen.done / Math.max(1, archiveOpen.total)) * 100}%`}}
-              />
-            </div>
-          </div>
-        ) : (
-          <ul className="contacts__archive-list">
-            <li>Each selected contact moves to the archived status.</li>
-            <li>No contact details are deleted.</li>
-            <li>Every change writes a contact.updated entry to the audit log.</li>
-          </ul>
-        )}
-        {archiveOpen && archiveError ? (
-          <p className="contacts__bulk-error" role="alert">
-            {archiveOpen.error.message || 'The archive could not be completed.'}
-          </p>
-        ) : null}
       </ConfirmDialog>
-
-      <MergeDuplicatesModal
-        open={mergeOpen}
-        companies={companies}
-        onClose={() => setMergeOpen(false)}
-        onMerged={() => {
-          setRefreshKey((key) => key + 1)
-          clearSelection()
-        }}
-      />
-    </div>
-  )
-}

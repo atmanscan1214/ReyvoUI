@@ -9,7 +9,6 @@ import { useSession } from '../../lib/session'
 import { usePageTitle } from '../../lib/usePageTitle'
 import { useSetupData } from '../../lib/onboarding'
 import { api, ApiError } from '../../lib/api'
-import { resetDevSessions, loadSessions } from '../../lib/account'
 import '../../styles/auth.css'
 
 function formatTrial(tenantDetails) {

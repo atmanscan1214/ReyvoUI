@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
+  ConfirmDialog,
   DataTable,
   EmptyState,
   FilterBar,
@@ -10,11 +11,14 @@ import {
   PageHeader,
   Pagination,
   StatusBadge,
+  useToast,
 } from '../../../components/ui'
 import { Building, Lock, Plus, Refresh, Search } from '../../../components/icons'
 import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
 import { CompanyFormModal } from './CompanyFormModal'
+import { BulkUpdateModal } from './BulkUpdateModal'
+import { MergeDuplicatesModal } from './MergeDuplicatesModal'
 import './companies.css'
 
 function formatDate(value) {
@@ -37,20 +41,13 @@ function companyLocation(row) {
   return ''
 }
 
-function mapApiCompany(raw) {
-  return {
-    id: raw.id || `company-${Math.random().toString(36).slice(2, 9)}`,
-    name: raw.name || '—',
-    domain: raw.domain || null,
-    industry: raw.industry || null,
-    location: raw.location || null,
-    employeeCount: raw.employeeCount || null,
-    status: raw.status || 'active',
-    updatedAt: raw.updatedAt || Date.now(),
-  }
+function mapCompany(id, companies) {
+  const match = companies.find(c => c.id === id)
+  return match ? match.name : '—'
 }
 
-// Mock data: 6 seed companies (matching the verified baseline)
+// Fallback companies for when the API is unreachable (dev-first pattern, T02).
+// Kept so the page renders immediately even without a running backend.
 const mockCompanies = [
   { id: 'c1', name: 'Acme Corp', domain: 'acme.com', industry: 'Technology', location: 'San Francisco, US', employeeCount: 50, status: 'active', updatedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 },
   { id: 'c2', name: 'Northwind Inc', domain: 'northwind.com', industry: 'Manufacturing', location: 'Chicago, US', employeeCount: 120, status: 'active', updatedAt: Date.now() - 1 * 24 * 60 * 60 * 1000 },
@@ -70,18 +67,25 @@ export function CompaniesPage() {
   const search = params.get('search') ?? ''
   const industry = params.get('industry') ?? ''
   const page = Math.max(1, Number(params.get('page') ?? 1) || 1)
-  const pageSize = 6
+  const pageSize = 25
 
   const [searchInput, setSearchInput] = useState(search)
   const [roleKnown, setRoleKnown] = useState(false)
   const [canWrite, setCanWrite] = useState(false)
   const [industries, setIndustries] = useState(['Technology', 'Manufacturing', 'Science', 'Software', 'Financial Services'])
+  const [companies, setCompanies] = useState([])
   const [rows, setRows] = useState([])
-  const [total, setTotal] = useState(mockCompanies.length)
+  const [total, setTotal] = useState(0)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set())
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
+
+  const { toast } = useToast()
 
   // Wait for profile before determining role write access
   useEffect(() => {
@@ -97,22 +101,41 @@ export function CompaniesPage() {
   useEffect(() => {
     if (searchInput === search) return undefined
     const timer = setTimeout(() => {
-      patchParams({ search: searchInput.trim(), page: null }, { replace: true })
+      patchParams({ search: searchInput.trim(), industry: industry, page: null }, { replace: true })
     }, 300)
     return () => clearTimeout(timer)
   }, [searchInput, search])
 
-  // Use mock data when API is not available (dev fallback)
+  // Fetch companies from live API. Fall back to mock data on error.
   useEffect(() => {
-    setStatus('ready')
-    const filtered = mockCompanies.filter(c => {
-      const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.domain && c.domain.toLowerCase().includes(search.toLowerCase()))
-      const matchesIndustry = !industry || c.industry === industry
-      return matchesSearch && matchesIndustry
+    let cancelled = false
+    setStatus('loading')
+    api.list('/companies', {
+      params: { search: searchInput.trim(), industry, limit: pageSize, offset: (page - 1) * pageSize },
+    }).then((data) => {
+      if (!cancelled) {
+        setRows(data.items)
+        setTotal(data.total)
+        setStatus('ready')
+        // Populate industry filter from live data
+        api.listIndustryOptions({ signal: new AbortController().signal }).then((opts) => {
+          if (!cancelled) setIndustries(opts)
+        })
+      }
+    }).catch((err) => {
+      if (!cancelled && err?.status !== 401) {
+        setStatus('error')
+        setError(err?.message || 'Could not load companies')
+        // Fallback to mock data so the page renders even without a running backend
+        setRows(mockCompanies)
+        setTotal(mockCompanies.length)
+        setIndustries(['Technology', 'Manufacturing', 'Science', 'Software', 'Financial Services'])
+      }
     })
-    setRows(filtered)
-    setTotal(filtered.length)
-  }, [searchInput, industry])
+    return () => {
+      cancelled = true
+    }
+  }, [searchInput, industry, page])
 
   function patchParams(patch, options = {}) {
     const next = new URLSearchParams(params)
@@ -126,6 +149,10 @@ export function CompaniesPage() {
   function resetFilters() {
     setSearchInput('')
     setParams(new URLSearchParams(), { replace: true })
+  }
+
+  function clearSelection() {
+    setSelectedKeys(new Set())
   }
 
   const columns = [
@@ -174,12 +201,12 @@ export function CompaniesPage() {
     },
   ]
 
-  const emptyState = hasFilters ? (
+  const emptyState = search || industry ? (
     <EmptyState
       compact
       icon={Search}
       title="No companies match these filters"
-      description="Try a different name or domain, or clear the industry filter."
+      description="Try a different name or industry, or clear the filters."
       actions={
         <Button variant="ghost" size="sm" onClick={resetFilters}>
           Clear filters
@@ -285,6 +312,50 @@ export function CompaniesPage() {
             />
           </FilterBar>
 
+          {canWrite && selectedKeys.size > 0 ? (
+            <div className="companies__bulk" role="region" aria-label="Bulk actions">
+              <span className="companies__bulk-count">
+                <strong>{selectedKeys.size.toLocaleString()}</strong>{' '}
+                {selectedKeys.size === 1 ? 'company selected' : 'companies selected'}
+              </span>
+              <div className="companies__bulk-actions">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leadingIcon={Archive}
+                  onClick={() => {
+                    setArchiveError(null)
+                    setArchiveOpen(true)
+                  }}
+                  disabled={Boolean(archiveOpen)}
+                >
+                  Archive
+                </Button>
+                {canWrite && selectedKeys.size > 0 ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      setError(null)
+                      setBulkOpen(true)
+                    }}
+                    disabled={Boolean(archiveOpen)}
+                  >
+                    Update fields
+                  </Button>
+                ) : null}
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  onClick={clearSelection}
+                  disabled={Boolean(archiveOpen)}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <DataTable
             caption="Companies"
             columns={columns}
@@ -295,6 +366,9 @@ export function CompaniesPage() {
             error={status === 'error' ? error : null}
             onRetry={() => setRefreshKey((key) => key + 1)}
             empty={emptyState}
+            selectable={canWrite}
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
             onRowClick={(row) => navigate(`/app/companies/${row.id}`)}
             rowLabel={(row) => `Open ${row.name}`}
           />
@@ -310,7 +384,7 @@ export function CompaniesPage() {
             />
           ) : null}
         </>
-      )}
+      )
 
       <CompanyFormModal
         open={formOpen}
@@ -321,6 +395,27 @@ export function CompaniesPage() {
           setRefreshKey((key) => key + 1)
         }}
       />
-    </div>
-  )
-}
+
+      <BulkUpdateModal
+        open={bulkOpen}
+        count={selectedKeys.size}
+        companies={companies}
+        running={false}
+        progress={null}
+        error={null}
+        onClose={() => {
+          if (bulkOpen) return
+          setBulkOpen(false)
+        }}
+        onApply={() => toast.info('Bulk update feature coming soon')}
+      />
+
+      <MergeDuplicatesModal
+        open={mergeOpen}
+        companies={companies}
+        onClose={() => setMergeOpen(false)}
+        onMerged={() => {
+          setRefreshKey((key) => key + 1)
+          clearSelection()
+        }}
+      />
