@@ -522,5 +522,7 @@ export function ContactsPage() {
         title={`Archive ${plural(selectedKeys.size, 'contact')}?`}
         description="Archived contacts stay in the workspace with their details intact. Change the status back at any time."
         confirmLabel={archiveOpen ? 'Try again' : 'Archive contacts'}
-      >
-      </ConfirmDialog>
+      />
+    </div>
+  )
+}

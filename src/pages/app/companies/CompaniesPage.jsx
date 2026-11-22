@@ -384,7 +384,7 @@ export function CompaniesPage() {
             />
           ) : null}
         </>
-      )
+      )}
 
       <CompanyFormModal
         open={formOpen}
@@ -419,3 +419,6 @@ export function CompaniesPage() {
           clearSelection()
         }}
       />
+    </div>
+  )
+}
