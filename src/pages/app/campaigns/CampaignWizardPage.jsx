@@ -456,6 +456,12 @@ export function CampaignWizardPage() {
     return () => controller.abort()
   }, [selectedKey, options, canWrite])
 
+  // Resolved before the preflight effects below, which read it in their
+  // dependency arrays during render.
+  const selectedOption = options
+    ? ([...options.lists, ...options.segments].find((entry) => entry.key === selectedKey) ?? null)
+    : null
+
   // Exclusion inputs (suppressions + cross-campaign enrollments) are
   // audience-independent, so they load once and are reused for every pick.
   useEffect(() => {
@@ -594,10 +600,6 @@ export function CampaignWizardPage() {
 
     return () => controller.abort()
   }, [draftCampaignId, step, reviewStepIndex, sequenceSteps, audience])
-
-  const selectedOption = options
-    ? [...options.lists, ...options.segments].find((entry) => entry.key === selectedKey) ?? null
-    : null
 
   const mailboxSplit = useMemo(
     () => (mailboxes ? splitMailboxes(mailboxes) : { usable: [], blocked: [] }),

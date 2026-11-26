@@ -227,9 +227,8 @@ function ProfilePanel({ user, role, account, onPatched }) {
 
       {import.meta.env.DEV ? (
         <DevNote>
-          The API build has no profile-update route. In development the display name is stored in
-          this browser under <code>reyvo.account.v1</code>; production reports the feature as
-          unavailable instead.
+          Profile edits use the API. If this build answers 404/405, development keeps the display
+          name in this browser under <code>reyvo.account.v1</code> instead.
         </DevNote>
       ) : null}
     </div>
@@ -247,11 +246,30 @@ function EmailPanel({ user, account, onAccountChange }) {
   const [banner, setBanner] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [pending, setPending] = useState(() => {
+    if (account.pendingEmail) {
+      return {
+        email: account.pendingEmail,
+        expiresAt: account.pendingEmailExpiresAt,
+        source: 'local',
+      }
+    }
+    if (user?.pending_email) {
+      return {
+        email: user.pending_email,
+        expiresAt: user.pending_email_expires_at
+          ? Date.parse(user.pending_email_expires_at)
+          : null,
+        source: 'server',
+      }
+    }
+    return null
+  })
 
   const currentEmail = account.email || user?.email || ''
   const isLocalEmail = Boolean(account.email && account.email !== user?.email)
-  const pendingExpiresAt = Number(account.pendingEmailExpiresAt ?? 0)
-  const pendingExpired = Boolean(account.pendingEmail) && Date.now() > pendingExpiresAt
+  const pendingExpired = Boolean(pending) && Date.now() > Number(pending?.expiresAt ?? 0)
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -281,14 +299,18 @@ function EmailPanel({ user, account, onAccountChange }) {
       })
       setPassword('')
       setEmail('')
+      setPending({
+        email: result.pendingEmail,
+        expiresAt: result.expiresAt,
+        source: result.development ? 'local' : 'server',
+      })
       onAccountChange()
       setBanner({
         tone: 'success',
         title: 'Verification pending.',
-        text:
-          result.development || import.meta.env.DEV
-            ? `Use the development helper below to confirm ${result.pendingEmail}. Production sends a signed verification link and signs out every session.`
-            : `We sent a verification link to ${result.pendingEmail}. Open it to finish the change.`,
+        text: result.development
+          ? `Use the development helper below to confirm ${result.pendingEmail}. Production sends a signed verification link and signs out every session.`
+          : `We sent a verification link to ${result.pendingEmail}. Open it to finish the change.`,
       })
       toast.success('Verification requested for your new address.')
     } catch (caught) {
@@ -312,6 +334,7 @@ function EmailPanel({ user, account, onAccountChange }) {
     try {
       const result = await confirmEmailChange(user.id)
       if (result.status === 'changed') {
+        setPending(null)
         onAccountChange()
         setBanner({
           tone: 'success',
@@ -320,6 +343,7 @@ function EmailPanel({ user, account, onAccountChange }) {
         })
         toast.success('New email confirmed.')
       } else if (result.status === 'expired') {
+        setPending(null)
         onAccountChange()
         setBanner({
           tone: 'warning',
@@ -341,10 +365,19 @@ function EmailPanel({ user, account, onAccountChange }) {
   }
 
   async function handleCancel() {
-    cancelEmailChange(user.id)
-    onAccountChange()
-    setBanner(null)
-    toast.info('Email change cancelled.')
+    setCancelling(true)
+    setFormError(null)
+    try {
+      await cancelEmailChange(user.id)
+      setPending(null)
+      onAccountChange()
+      setBanner(null)
+      toast.info('Email change cancelled.')
+    } catch (caught) {
+      setFormError(caught?.message || 'We could not cancel the email change. Try again.')
+    } finally {
+      setCancelling(false)
+    }
   }
 
   return (
@@ -386,7 +419,7 @@ function EmailPanel({ user, account, onAccountChange }) {
         </div>
       ) : null}
 
-      {account.pendingEmail && !pendingExpired ? (
+      {pending && !pendingExpired ? (
         <div className="account__pending">
           <div className="account__pending-head">
             <span className="account__pending-icon" aria-hidden="true">
@@ -394,17 +427,17 @@ function EmailPanel({ user, account, onAccountChange }) {
             </span>
             <div>
               <p className="account__pending-title">Waiting on verification</p>
-              <p className="account__pending-email">{account.pendingEmail}</p>
+              <p className="account__pending-email">{pending.email}</p>
             </div>
           </div>
           <p className="account__pending-note">
-            The link expires {formatDateTime(account.pendingEmailExpiresAt)} (24 hours).
-            {import.meta.env.DEV
+            The link expires {formatDateTime(pending.expiresAt)} (24 hours).
+            {pending.source === 'local' && import.meta.env.DEV
               ? ' This API build cannot send mail, so use the development confirmation below.'
               : ' Check the new inbox and open the link to finish.'}
           </p>
           <div className="account__actions">
-            {import.meta.env.DEV ? (
+            {pending.source === 'local' && import.meta.env.DEV ? (
               <Button
                 variant="primary"
                 loading={confirming}
@@ -414,27 +447,32 @@ function EmailPanel({ user, account, onAccountChange }) {
                 Confirm new email
               </Button>
             ) : null}
-            <Button variant="ghost" onClick={handleCancel} disabled={confirming}>
+            <Button
+              variant="ghost"
+              onClick={handleCancel}
+              disabled={confirming || cancelling}
+              loading={cancelling}
+            >
               Cancel change
             </Button>
           </div>
-          {import.meta.env.DEV ? (
+          {pending.source === 'local' && import.meta.env.DEV ? (
             <DevNote>
               Development only: this confirms the pending address in <code>reyvo.account.v1</code>{' '}
               and revokes the other demo sessions. The API still holds the original address, so keep
-              signing in with it until an email-change endpoint ships.
+              signing in with it until the email-change endpoint is available.
             </DevNote>
           ) : null}
         </div>
-      ) : account.pendingEmail && pendingExpired ? (
+      ) : pending && pendingExpired ? (
         <div className="account__pending account__pending--expired">
           <p className="account__pending-title">That verification expired</p>
           <p className="account__pending-note">
-            {account.pendingEmail} was not confirmed within {EMAIL_CHANGE_TTL_MS / 3_600_000} hours.
-            Start again or cancel the request.
+            {pending.email} was not confirmed within {EMAIL_CHANGE_TTL_MS / 3_600_000} hours. Start
+            again or cancel the request.
           </p>
           <div className="account__actions">
-            <Button variant="ghost" onClick={handleCancel}>
+            <Button variant="ghost" onClick={handleCancel} loading={cancelling} disabled={cancelling}>
               Cancel change
             </Button>
           </div>
@@ -486,8 +524,9 @@ function EmailPanel({ user, account, onAccountChange }) {
 
       {import.meta.env.DEV ? (
         <DevNote>
-          The API build has no email-change endpoint. Development verifies your current password
-          against the live login route, then keeps the pending 24-hour change in this browser.
+          Email changes use the API and email a single-use link. If this build answers 404/405,
+          development verifies your current password against the live login route and keeps the
+          pending 24-hour change in this browser instead.
         </DevNote>
       ) : null}
     </div>

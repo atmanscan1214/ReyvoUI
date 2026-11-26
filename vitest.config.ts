@@ -6,15 +6,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    test: [
-      '<rootDir>/src/**/*.test.ts',
-      '<rootDir>/src/**/*.spec.ts',
-    ],
-    exclude: [
-      '<rootDir>/e2e/**',
-      '<rootDir>/node_modules/**',
-      '<rootDir>/my-react-app/**',
-    ],
+    // Unit tests only. Playwright specs live in e2e/ and run through
+    // `npm run test:e2e`.
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
     coverage: {
       reporter: ['text', 'json', 'html'],
     },

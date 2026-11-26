@@ -288,11 +288,19 @@ operations are server-backed.
 | `GET /tenants/current/usage` | Contacts, companies, campaigns, messages, replies, seats, daily cap |
 | `GET /tenants/current/audit-logs` | Paginated tenant audit log; supports `action`, `actor_type`, `search`, `since`, and `until` |
 | `GET /tenants/current/audit-logs/export` | Filtered CSV export, capped at 10,000 rows |
+| `GET /tenants/current/export` | Workspace archive: contacts, companies, campaigns, imports, suppressions, and audit logs as CSV documents |
 | `GET/PATCH/DELETE /tenants/current/sso` | Read, update, disable SSO |
 
 Audit reads and exports are restricted to workspace owners/admins. Audit rows include the actor
 type; platform administrator actions are recorded as `platform_admin` and remain visible in the
 tenant-scoped log and CSV export.
+
+The workspace archive is owner-only and returns JSON rather than a file download: an object whose
+`contacts`, `companies`, `campaigns`, `imports`, `suppressions`, and `audit_logs` keys each hold one
+CSV document as a string. The client packages those documents into its own archive. Every section is
+capped at 10,000 rows so a large workspace still receives a partial archive instead of an error.
+Exported cells that begin with `=`, `+`, `-`, `@`, tab, or carriage return are prefixed with a single
+quote to prevent spreadsheet formula injection.
 
 Workspace settings use `settings.default_sending_window` (`local_window.start/end` and
 `send_days`), `settings.default_daily_cap` (campaign messages/day), `settings.default_signature`
@@ -853,8 +861,9 @@ These are backend extension points per `DEVELOPER_GUIDE.md`; the UI must not imp
   and platform rows (`tenant_id IS NULL`). The UI applies the design's override rules by reason
   (`complaint` and `legal` non-overridable) and cannot label a platform block as
   "blocked by platform".
-- Sources under `ReyvoAPI/ReyvoApi/src/reyvo/*.py` were missing at capture time. The API was
-  reachable from a running process, but restarting it may require restoring the sources.
+- The workspace export returns JSON (`{ contacts, companies, campaigns, imports, suppressions,
+  audit_logs }`) with one CSV document per key rather than a ZIP file. The UI packages those
+  documents client-side and every section is capped at 10,000 rows.
 
 ## 7. API client utilities
 

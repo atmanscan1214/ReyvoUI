@@ -1,0 +1,73 @@
+/* ---------------------------------------------------------------------------
+   Service status (/status)
+   --------------------------------------------------------------------------- */
+
+.status-page__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.status-page__checked {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.status-page__checks {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-page__check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.status-page__check-main {
+  min-width: 0;
+}
+
+.status-page__check-main h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.status-page__check-main p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.status-page__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status-page__footer p {
+  margin: 0;
+  max-width: 60ch;
+}
+
+.status-page__footer a {
+  color: var(--accent-strong, var(--accent));
+  font-weight: 600;
+}

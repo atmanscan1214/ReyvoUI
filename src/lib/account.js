@@ -6,10 +6,10 @@ import { api, ApiError } from './api'
  * The design specifies profile edits, an email change that requires the current
  * password plus verification of the new address, a password change that
  * invalidates sessions, and a session list with individual and global sign-out.
- * Profile and email changes still use development-only browser fallbacks.
  *
- * Password and session operations are server-backed. Development fallbacks
- * remain only for profile/email features whose API routes are not implemented.
+ * Profile and email changes call the API first. Development builds keep a
+ * browser fallback for older API builds that answer 404/405, so the screens stay
+ * usable while the endpoints roll out.
  */
 
 export const ACCOUNT_STORE_KEY = 'reyvo.account.v1'
@@ -226,30 +226,39 @@ export async function requestEmailChange(user, { email, currentPassword }) {
 }
 
 /**
- * Confirms a pending email change. Production uses the verification token from
- * the email link; the development helper confirms the recorded pending address.
+ * Confirms a pending email change.
+ *
+ * The emailed link carries a single-use token and may be opened on any device,
+ * so the token path never depends on local browser state. The development
+ * helper (no token) still confirms the address recorded in this browser.
  */
 export async function confirmEmailChange(userId, token) {
-  const record = accountRecord(userId)
-  if (!record?.pendingEmail) {
-    return { development: !token, status: 'invalid', email: null }
-  }
-
   if (token) {
     try {
       const data = await api.confirmEmailChange({ token })
       const updated = extractUser(data)
-      return {
-        development: false,
-        status: 'changed',
-        email: updated?.email ?? record.pendingEmail,
+      if (userId) {
+        updateRecord(userId, {
+          email: updated?.email ?? null,
+          emailVerifiedAt: Date.now(),
+          pendingEmail: null,
+          pendingEmailIssuedAt: null,
+          pendingEmailExpiresAt: null,
+          serverEmail: updated?.email ?? null,
+        })
       }
+      return { development: false, status: 'changed', email: updated?.email ?? null }
     } catch (error) {
       if (!isMissingEndpoint(error)) throw error
       if (!import.meta.env.DEV) {
         throw unavailable('Email changes are not available on this API build yet.')
       }
     }
+  }
+
+  const record = accountRecord(userId)
+  if (!record?.pendingEmail) {
+    return { development: !token, status: 'invalid', email: null }
   }
 
   if (Date.now() > Number(record.pendingEmailExpiresAt ?? 0)) {
@@ -270,12 +279,27 @@ export async function confirmEmailChange(userId, token) {
   return { development: true, status: 'changed', email: record.pendingEmail }
 }
 
-export function cancelEmailChange(userId) {
+/** Discards a pending change on the server, with a browser fallback in dev. */
+export async function cancelEmailChange(userId) {
+  let serverCancelled = false
+
+  try {
+    await api.cancelEmailChange()
+    serverCancelled = true
+  } catch (error) {
+    if (!isMissingEndpoint(error)) throw error
+    if (!import.meta.env.DEV) {
+      throw unavailable('Email changes are not available on this API build yet.')
+    }
+  }
+
   updateRecord(userId, {
     pendingEmail: null,
     pendingEmailIssuedAt: null,
     pendingEmailExpiresAt: null,
   })
+
+  return { development: !serverCancelled }
 }
 
 /**

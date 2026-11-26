@@ -4,10 +4,11 @@ import { consumeLocalChallenge, createLocalChallenge } from './onboarding'
 /**
  * Email verification adapter.
  *
- * The current API build has no verification routes, so development builds fall
- * back to a local, single-use challenge stored under `reyvo.onboarding.v1`.
- * Production builds always call the API and surface an honest unavailable
- * error instead of pretending an address was verified.
+ * Calls `POST /auth/verify-email` and `POST /auth/resend-verification`.
+ * Development builds fall back to a local, single-use challenge stored under
+ * `reyvo.onboarding.v1` when an older API build answers 404/405. Production
+ * builds surface an honest unavailable error instead of pretending an address
+ * was verified.
  */
 
 const UNAVAILABLE_MESSAGE =

@@ -255,6 +255,22 @@ export const APP_AREAS = {
       'Tenant-wide AI drafting toggle.',
     ],
   },
+  data: {
+    path: 'settings/data',
+    label: 'Data & privacy',
+    title: 'Data & privacy',
+    icon: Database,
+    task: 'T45',
+    roles: ['owner'],
+    description:
+      'Download a complete copy of the workspace or schedule permanent deletion after a 30-day grace period.',
+    bullets: [
+      'One ZIP archive with contacts, companies, campaigns, imports, suppressions, and audit logs.',
+      'Owner-only export and deletion, with an export offered before the destructive action.',
+      'Typed-name confirmation before the workspace is scheduled for deletion.',
+      'Import reports remain downloadable from the Imports page.',
+    ],
+  },
   team: {
     path: 'settings/team',
     label: 'Team',
@@ -334,7 +350,7 @@ export const NAV_GROUPS = [
   },
   {
     label: 'Account',
-    items: ['notifications', 'billing', 'settings', 'team', 'security', 'account'],
+    items: ['notifications', 'billing', 'settings', 'data', 'team', 'security', 'account'],
   },
   {
     label: 'Platform',

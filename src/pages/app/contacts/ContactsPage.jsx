@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
@@ -13,102 +13,51 @@ import {
   StatusBadge,
   useToast,
 } from '../../../components/ui'
-import { Archive, Building, Download, Lock, Merge, Plus, Refresh, Search, Users } from '../../../components/icons'
+import {
+  Archive,
+  Building,
+  Download,
+  Lock,
+  Merge,
+  Plus,
+  Refresh,
+  Search,
+  Users,
+} from '../../../components/icons'
 import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
+import {
+  CONTACTS_PAGE_SIZE,
+  CONTACT_STATUSES,
+  listContacts,
+  loadContactCompanies,
+} from '../../../lib/contacts'
+import {
+  CONTACT_EXPORT_MAX,
+  bulkPatchContacts,
+  downloadCsv,
+  exportContactsView,
+} from '../../../lib/contactBulk'
 import { ContactFormModal } from './ContactFormModal'
 import { BulkUpdateModal } from './BulkUpdateModal'
 import { MergeDuplicatesModal } from './MergeDuplicatesModal'
 import './contacts.css'
 
 function formatDate(value) {
-  return value ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value)) : '—'
+  if (!value) return '—'
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(new Date(value))
+  } catch {
+    return '—'
+  }
 }
 
 function plural(count, singular, pluralForm = `${singular}s`) {
   return `${count.toLocaleString()} ${count === 1 ? singular : pluralForm}`
-}
-
-// Fallback contacts for when the API is unreachable (dev-first pattern, T02).
-// Kept so the page renders immediately even without a running backend.
-const mockContacts = [
-  {
-    id: 'c1',
-    fullName: 'Alice Johnson',
-    email: 'alice@agency.com',
-    title: 'Marketing Manager',
-    companyId: 'c1',
-    status: 'new',
-    emailStatus: 'verified',
-    lastContactedAt: Date.now() - 24 * 60 * 60 * 1000,
-    source: 'Import',
-    tags: ['partner'],
-  },
-  {
-    id: 'c2',
-    fullName: 'Bob Smith',
-    email: 'bob@startup.io',
-    title: 'CTO',
-    companyId: 'c2',
-    status: 'contacted',
-    emailStatus: 'verified',
-    lastContactedAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
-    source: 'Manual',
-    tags: ['decision-maker'],
-  },
-  {
-    id: 'c3',
-    fullName: 'Carol Davies',
-    email: 'carol@enterprise.com',
-    title: 'Director',
-    companyId: 'c3',
-    status: 'contacted',
-    emailStatus: 'invalid',
-    lastContactedAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
-    source: 'Import',
-    tags: ['partner', 'champion'],
-  },
-  {
-    id: 'c4',
-    fullName: 'David Chen',
-    email: 'david@scaleup.co',
-    title: 'Growth Lead',
-    companyId: 'c4',
-    status: 'archived',
-    emailStatus: 'verified',
-    lastContactedAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
-    source: 'Manual',
-    tags: [],
-  },
-  {
-    id: 'c5',
-    fullName: 'Emma Wilson',
-    email: 'emma@growth.io',
-    title: 'Manager',
-    companyId: 'c5',
-    status: 'new',
-    emailStatus: 'pending',
-    lastContactedAt: null,
-    source: 'Manual',
-    tags: [],
-  },
-  {
-    id: 'c6',
-    fullName: 'Frank Miller',
-    email: 'finner@northwind.com',
-    title: 'Analyst',
-    companyId: 'c6',
-    status: 'new',
-    emailStatus: 'verified',
-    lastContactedAt: Date.now() - 2 * 24 * 60 * 60 * 1000,
-    source: 'Import',
-    tags: ['champion'],
-  },
-]
-
-function mapCompany(id, companies) {
-  const match = companies.find(c => c.id === id)
-  return match ? match.name : '—'
 }
 
 export function ContactsPage() {
@@ -122,25 +71,35 @@ export function ContactsPage() {
   const statusFilter = params.get('status') ?? ''
   const companyId = params.get('company_id') ?? ''
   const page = Math.max(1, Number(params.get('page') ?? 1) || 1)
-  const pageSize = 25
 
   const [searchInput, setSearchInput] = useState(search)
-  const [roleKnown, setRoleKnown] = useState(false)
   const [canWrite, setCanWrite] = useState(false)
+  const [roleKnown, setRoleKnown] = useState(false)
   const [companies, setCompanies] = useState([])
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
-  const [status, setStatus] = useState('loading')
+  const [loadState, setLoadState] = useState('loading')
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
+
   const [formOpen, setFormOpen] = useState(false)
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set())
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(null)
+  const [bulkError, setBulkError] = useState(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const { toast } = useToast()
 
-  // Wait for profile before determining role write access
+  const companyMap = useMemo(
+    () => new Map(companies.map((company) => [company.id, company])),
+    [companies],
+  )
+
   useEffect(() => {
     setRoleKnown(profileStatus === 'ready')
     setCanWrite(profileStatus === 'ready' && (role === 'owner' || role === 'admin'))
@@ -150,48 +109,57 @@ export function ContactsPage() {
     setSearchInput(search)
   }, [search])
 
-  // Debounce search params update
+  // Debounce the search box into the URL so every keystroke is not a request.
   useEffect(() => {
-    if (searchInput === search) return undefined
+    const next = searchInput.trim()
+    if (next === search) return undefined
     const timer = setTimeout(() => {
-      patchParams({ search: searchInput.trim(), status: statusFilter, company_id: companyId, page: null }, { replace: true })
+      patchParams({ search: next, page: null }, { replace: true })
     }, 300)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput, search])
 
-  // Fetch contacts from live API. Fall back to mock data on error so the page
-  // renders even when the backend is not running. This matches the dev-first pattern
-  // approved in T02 and documented in TASKS.md.
   useEffect(() => {
-    let cancelled = false
-    setStatus('loading')
-    api.list('/contacts', {
-      params: { search: searchInput.trim(), status: statusFilter, company_id: companyId, limit: pageSize, offset: (page - 1) * pageSize },
-    }).then((data) => {
-      if (!cancelled) {
+    const controller = new AbortController()
+    setLoadState('loading')
+    setError(null)
+
+    listContacts(
+      {
+        search: search || undefined,
+        status: statusFilter || undefined,
+        companyId: companyId || undefined,
+        limit: CONTACTS_PAGE_SIZE,
+        offset: (page - 1) * CONTACTS_PAGE_SIZE,
+      },
+      controller.signal,
+    )
+      .then((data) => {
         setRows(data.items)
         setTotal(data.total)
-        setStatus('ready')
-      }
-    }).catch((err) => {
-      if (!cancelled && err?.status !== 401) {
-        setStatus('error')
-        setError(err?.message || 'Could not load contacts')
-        // Fallback to mock data so the page renders even without a running backend
-        setRows(mockContacts)
-        setTotal(mockContacts.length)
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [searchInput, statusFilter, companyId, page])
+        setLoadState('ready')
+      })
+      .catch((caught) => {
+        if (caught?.name === 'AbortError') return
+        setError(caught)
+        setLoadState(caught?.status === 403 ? 'denied' : 'error')
+      })
 
+    return () => controller.abort()
+  }, [search, statusFilter, companyId, page, refreshKey])
+
+  // Company names are not embedded in `ContactRead`, so the filter and rows
+  // share one sampled `/companies` read.
   useEffect(() => {
-    api.loadContactCompanies({ signal: new AbortController().signal }).then((companies) => {
-      if (!cancelled) setCompanies(companies)
-    }).catch(() => setCompanies([]))
-  }, [])
+    const controller = new AbortController()
+    loadContactCompanies(controller.signal)
+      .then((items) => setCompanies(items))
+      .catch((caught) => {
+        if (caught?.name !== 'AbortError') setCompanies([])
+      })
+    return () => controller.abort()
+  }, [refreshKey])
 
   function patchParams(patch, options = {}) {
     const next = new URLSearchParams(params)
@@ -211,6 +179,107 @@ export function ContactsPage() {
     setSelectedKeys(new Set())
   }
 
+  function companyName(id) {
+    if (!id) return '—'
+    return companyMap.get(id)?.name ?? '—'
+  }
+
+  const hasFilters = Boolean(search || statusFilter || companyId)
+
+  async function handleExport() {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const result = await exportContactsView({
+        search: search || undefined,
+        status: statusFilter || undefined,
+        companyId: companyId || undefined,
+        max: CONTACT_EXPORT_MAX,
+      })
+
+      if (result.count === 0) {
+        toast.info('There are no contacts in this view to export.')
+        return
+      }
+
+      downloadCsv(result.csv, result.filename)
+      toast.success(
+        `Exported ${plural(result.count, 'contact')}${result.hasFilters ? ' from the filtered view' : ''}.`,
+      )
+      if (result.truncated) {
+        toast.info(
+          `Only the first ${CONTACT_EXPORT_MAX.toLocaleString()} contacts were exported. Narrow the filters to capture the rest.`,
+        )
+      }
+    } catch (caught) {
+      if (caught?.name === 'AbortError') return
+      toast.error(caught?.message || 'The export could not be created.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function applyBulkPatch(patch) {
+    const ids = [...selectedKeys]
+    if (ids.length === 0 || bulkRunning) return
+
+    setBulkRunning(true)
+    setBulkError(null)
+    setBulkProgress({ done: 0, total: ids.length })
+
+    try {
+      const result = await bulkPatchContacts(ids, patch, {
+        onProgress: (done, count) => setBulkProgress({ done, total: count }),
+      })
+
+      setRefreshKey((key) => key + 1)
+
+      if (result.failed.length > 0) {
+        setBulkError(
+          `${result.failed.length} of ${result.total} contacts could not be updated. The rest were saved — try again for the failures.`,
+        )
+        return
+      }
+
+      setBulkOpen(false)
+      clearSelection()
+      toast.success(`Updated ${plural(result.updated.length, 'contact')}.`)
+    } catch (caught) {
+      if (caught?.name === 'AbortError') return
+      setBulkError(caught?.message || 'The bulk update could not be completed.')
+    } finally {
+      setBulkRunning(false)
+      setBulkProgress(null)
+    }
+  }
+
+  async function handleArchive() {
+    const ids = [...selectedKeys]
+    if (ids.length === 0 || archiving) return
+
+    setArchiving(true)
+    try {
+      const result = await bulkPatchContacts(ids, { status: 'archived' })
+      setRefreshKey((key) => key + 1)
+
+      if (result.failed.length > 0) {
+        toast.error(
+          `${result.failed.length} of ${result.total} contacts could not be archived. Try again for the failures.`,
+        )
+        return
+      }
+
+      setArchiveOpen(false)
+      clearSelection()
+      toast.success(`Archived ${plural(result.updated.length, 'contact')}.`)
+    } catch (caught) {
+      if (caught?.name === 'AbortError') return
+      toast.error(caught?.message || 'The contacts could not be archived.')
+    } finally {
+      setArchiving(false)
+    }
+  }
+
   const columns = [
     {
       key: 'name',
@@ -225,7 +294,12 @@ export function ContactsPage() {
     {
       key: 'company',
       header: 'Company',
-      render: (row) => mapCompany(row.companyId, companies),
+      render: (row) =>
+        row.companyId ? (
+          companyName(row.companyId)
+        ) : (
+          <span className="contacts__muted">—</span>
+        ),
     },
     {
       key: 'title',
@@ -240,9 +314,7 @@ export function ContactsPage() {
     {
       key: 'emailStatus',
       header: 'Email health',
-      render: (row) => (
-        <StatusBadge status={row.emailStatus} size="sm" dot={false} />
-      ),
+      render: (row) => <StatusBadge status={row.emailStatus} size="sm" dot={false} />,
     },
     {
       key: 'lastContacted',
@@ -253,18 +325,19 @@ export function ContactsPage() {
     },
   ]
 
-  const emptyState = search || statusFilter || companyId ? (
+  const emptyState = hasFilters ? (
     <EmptyState
       compact
       icon={Search}
       title="No contacts match these filters"
-      description="Try a different name or email, or clear the status filter."
+      description="Try a different name or email, or clear the filters."
       actions={
         <Button variant="ghost" size="sm" onClick={resetFilters}>
           Clear filters
         </Button>
-      } />
-    ) : (
+      }
+    />
+  ) : (
     <EmptyState
       compact
       icon={Users}
@@ -281,7 +354,8 @@ export function ContactsPage() {
             Add your first contact
           </Button>
         ) : undefined
-      } />
+      }
+    />
   )
 
   return (
@@ -303,32 +377,25 @@ export function ContactsPage() {
           </>
         }
         actions={
-          status !== 'denied' ? (
+          loadState !== 'denied' ? (
             <>
               <Button
                 variant="ghost"
                 leadingIcon={Download}
-                onClick={() => toast.info('Export feature coming soon')}
-                disabled={status !== 'ready' || total === 0}
-                title="Download all pages of the current filtered view as CSV"
+                onClick={handleExport}
+                loading={exporting}
+                disabled={exporting || loadState === 'loading' || total === 0}
+                title="Download the current filtered view as CSV"
               >
                 Export view
               </Button>
               {canWrite ? (
-                <Button
-                  variant="ghost"
-                  leadingIcon={Merge}
-                  onClick={() => setMergeOpen(true)}
-                >
+                <Button variant="ghost" leadingIcon={Merge} onClick={() => setMergeOpen(true)}>
                   Merge duplicates
                 </Button>
               ) : null}
               {canWrite ? (
-                <Button
-                  variant="primary"
-                  leadingIcon={Plus}
-                  onClick={() => setFormOpen(true)}
-                >
+                <Button variant="primary" leadingIcon={Plus} onClick={() => setFormOpen(true)}>
                   New contact
                 </Button>
               ) : null}
@@ -349,14 +416,15 @@ export function ContactsPage() {
         </div>
       ) : null}
 
-      {status === 'denied' ? (
+      {loadState === 'denied' ? (
         <section className="app-card contacts__denied">
           <span className="contacts__denied-icon" aria-hidden="true">
             <Lock size={22} />
           </span>
           <h2>Contacts are restricted</h2>
           <p>
-            {error?.message || 'Your role does not allow access to contact records. Ask an owner or admin for access.'}
+            {error?.message ||
+              'Your role does not allow access to contact records. Ask an owner or admin for access.'}
           </p>
           <div className="contacts__denied-actions">
             <Button
@@ -378,23 +446,24 @@ export function ContactsPage() {
             onSearchChange={setSearchInput}
             searchPlaceholder="Search by name or email…"
             searchLabel="Search contacts"
-            activeCount={
-              (search ? 1 : 0) + (statusFilter ? 1 : 0) + (companyId ? 1 : 0)
-            }
+            activeCount={(search ? 1 : 0) + (statusFilter ? 1 : 0) + (companyId ? 1 : 0)}
             onReset={hasFilters ? resetFilters : undefined}
           >
             <FilterSelect
               label="Status"
               value={statusFilter}
               onChange={(value) => patchParams({ status: value, page: null })}
-              options={['new', 'contacted', 'archived']}
+              options={CONTACT_STATUSES}
               placeholder="All statuses"
             />
             <FilterSelect
               label="Company"
               value={companyId}
               onChange={(value) => patchParams({ company_id: value, page: null })}
-              options={companies}
+              options={companies.map((company) => ({
+                value: company.id,
+                label: company.name,
+              }))}
               placeholder="All companies"
             />
           </FilterBar>
@@ -403,8 +472,7 @@ export function ContactsPage() {
             <div className="contacts__scope">
               <Building size={15} aria-hidden="true" />
               <span>
-                Showing contacts at{' '}
-                <strong>{mapCompany(companyId, companies)}</strong>
+                Showing contacts at <strong>{companyName(companyId)}</strong>
               </span>
               <button
                 type="button"
@@ -427,33 +495,23 @@ export function ContactsPage() {
                   variant="ghost"
                   size="sm"
                   leadingIcon={Archive}
-                  onClick={() => {
-                    setArchiveError(null)
-                    setArchiveOpen(true)
-                  }}
-                  disabled={Boolean(archiveOpen)}
+                  onClick={() => setArchiveOpen(true)}
+                  disabled={archiving}
                 >
                   Archive
                 </Button>
-                {canWrite && selectedKeys.size > 0 ? (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => {
-                      setError(null)
-                      setBulkOpen(true)
-                    }}
-                    disabled={Boolean(archiveOpen)}
-                  >
-                    Update fields
-                  </Button>
-                ) : null}
                 <Button
-                  variant="quiet"
+                  variant="primary"
                   size="sm"
-                  onClick={clearSelection}
-                  disabled={Boolean(archiveOpen)}
+                  onClick={() => {
+                    setBulkError(null)
+                    setBulkOpen(true)
+                  }}
+                  disabled={archiving}
                 >
+                  Update fields
+                </Button>
+                <Button variant="quiet" size="sm" onClick={clearSelection} disabled={archiving}>
                   Clear
                 </Button>
               </div>
@@ -465,22 +523,22 @@ export function ContactsPage() {
             columns={columns}
             rows={rows}
             getRowKey={(row) => row.id}
-            loading={status === 'loading'}
+            loading={loadState === 'loading'}
             skeletonRows={6}
-            error={status === 'error' ? error : null}
+            error={loadState === 'error' ? error : null}
             onRetry={() => setRefreshKey((key) => key + 1)}
             empty={emptyState}
             selectable={canWrite}
             selectedKeys={selectedKeys}
             onSelectionChange={setSelectedKeys}
             onRowClick={(row) => navigate(`/app/contacts/${row.id}`)}
-            rowLabel={(row) => `Select ${row.fullName}`}
+            rowLabel={(row) => `Open ${row.fullName}`}
           />
 
-          {status === 'ready' && total > 0 ? (
+          {loadState === 'ready' && total > 0 ? (
             <Pagination
               page={page}
-              pageSize={pageSize}
+              pageSize={CONTACTS_PAGE_SIZE}
               total={total}
               onPageChange={(nextPage) => patchParams({ page: nextPage > 1 ? nextPage : null })}
               itemLabel="contacts"
@@ -493,13 +551,12 @@ export function ContactsPage() {
       <ContactFormModal
         open={formOpen}
         contact={null}
-        defaultCompany={null}
+        defaultCompany={companyId || null}
         onClose={() => setFormOpen(false)}
         onSaved={(saved) => {
           setFormOpen(false)
-          if (page !== 1) patchParams({ page: null }, { replace: true })
           setRefreshKey((key) => key + 1)
-          navigate(`/app/contacts/${saved.id}`)
+          if (saved?.id) navigate(`/app/contacts/${saved.id}`)
         }}
       />
 
@@ -507,21 +564,37 @@ export function ContactsPage() {
         open={bulkOpen}
         count={selectedKeys.size}
         companies={companies}
-        running={false}
-        progress={null}
-        error={null}
+        running={bulkRunning}
+        progress={bulkProgress}
+        error={bulkError}
         onClose={() => {
-          if (bulkOpen) return
+          if (bulkRunning) return
           setBulkOpen(false)
         }}
-        onApply={() => toast.info('Bulk update feature coming soon')}
+        onApply={applyBulkPatch}
       />
 
       <ConfirmDialog
         open={archiveOpen}
         title={`Archive ${plural(selectedKeys.size, 'contact')}?`}
         description="Archived contacts stay in the workspace with their details intact. Change the status back at any time."
-        confirmLabel={archiveOpen ? 'Try again' : 'Archive contacts'}
+        confirmLabel="Archive contacts"
+        loading={archiving}
+        onConfirm={handleArchive}
+        onCancel={() => {
+          if (archiving) return
+          setArchiveOpen(false)
+        }}
+      />
+
+      <MergeDuplicatesModal
+        open={mergeOpen}
+        companies={companies}
+        onClose={() => setMergeOpen(false)}
+        onMerged={() => {
+          setRefreshKey((key) => key + 1)
+          clearSelection()
+        }}
       />
     </div>
   )

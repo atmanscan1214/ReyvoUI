@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Badge,
   Button,
-  ConfirmDialog,
   DataTable,
   EmptyState,
   FilterBar,
@@ -11,14 +10,17 @@ import {
   PageHeader,
   Pagination,
   StatusBadge,
-  useToast,
 } from '../../../components/ui'
 import { Building, Lock, Plus, Refresh, Search } from '../../../components/icons'
 import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
+import {
+  COMPANIES_PAGE_SIZE,
+  companyLocation,
+  listCompanies,
+  listIndustryOptions,
+} from '../../../lib/companies'
 import { CompanyFormModal } from './CompanyFormModal'
-import { BulkUpdateModal } from './BulkUpdateModal'
-import { MergeDuplicatesModal } from './MergeDuplicatesModal'
 import './companies.css'
 
 function formatDate(value) {
@@ -34,29 +36,6 @@ function formatDate(value) {
   }
 }
 
-function companyLocation(row) {
-  if (!row) return ''
-  if (row.city && row.country) return `${row.city}, ${row.country}`
-  if (row.city) return row.city
-  return ''
-}
-
-function mapCompany(id, companies) {
-  const match = companies.find(c => c.id === id)
-  return match ? match.name : '—'
-}
-
-// Fallback companies for when the API is unreachable (dev-first pattern, T02).
-// Kept so the page renders immediately even without a running backend.
-const mockCompanies = [
-  { id: 'c1', name: 'Acme Corp', domain: 'acme.com', industry: 'Technology', location: 'San Francisco, US', employeeCount: 50, status: 'active', updatedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 },
-  { id: 'c2', name: 'Northwind Inc', domain: 'northwind.com', industry: 'Manufacturing', location: 'Chicago, US', employeeCount: 120, status: 'active', updatedAt: Date.now() - 1 * 24 * 60 * 60 * 1000 },
-  { id: 'c3', name: 'Stark Industries', domain: 'stark.com', industry: 'Technology', location: 'New York, US', employeeCount: 300, status: 'active', updatedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 },
-  { id: 'c4', name: 'Hawkins Lab', domain: 'hawkins.com', industry: 'Science', location: 'Hawkins, IN', employeeCount: 15, status: 'active', updatedAt: Date.now() - 5 * 60 * 60 * 1000 },
-  { id: 'c5', name: 'Pied Piper', domain: 'piedpiper.com', industry: 'Software', location: 'Palo Alto, US', employeeCount: 8, status: 'active', updatedAt: Date.now() - 12 * 60 * 60 * 1000 },
-  { id: 'c6', name: 'Wayne Enterprises', domain: 'wayne.com', industry: 'Financial Services', location: 'Gotham, US', employeeCount: 2500, status: 'active', updatedAt: Date.now() - 24 * 60 * 60 * 1000 },
-]
-
 export function CompaniesPage() {
   usePageTitle('Companies')
 
@@ -67,27 +46,18 @@ export function CompaniesPage() {
   const search = params.get('search') ?? ''
   const industry = params.get('industry') ?? ''
   const page = Math.max(1, Number(params.get('page') ?? 1) || 1)
-  const pageSize = 25
 
   const [searchInput, setSearchInput] = useState(search)
-  const [roleKnown, setRoleKnown] = useState(false)
   const [canWrite, setCanWrite] = useState(false)
-  const [industries, setIndustries] = useState(['Technology', 'Manufacturing', 'Science', 'Software', 'Financial Services'])
-  const [companies, setCompanies] = useState([])
+  const [roleKnown, setRoleKnown] = useState(false)
+  const [industries, setIndustries] = useState([])
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
-  const [status, setStatus] = useState('loading')
+  const [loadState, setLoadState] = useState('loading')
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
-  const [selectedKeys, setSelectedKeys] = useState(() => new Set())
-  const [bulkOpen, setBulkOpen] = useState(false)
-  const [archiveOpen, setArchiveOpen] = useState(false)
-  const [mergeOpen, setMergeOpen] = useState(false)
 
-  const { toast } = useToast()
-
-  // Wait for profile before determining role write access
   useEffect(() => {
     setRoleKnown(profileStatus === 'ready')
     setCanWrite(profileStatus === 'ready' && (role === 'owner' || role === 'admin'))
@@ -97,45 +67,55 @@ export function CompaniesPage() {
     setSearchInput(search)
   }, [search])
 
-  // Debounce search params update
+  // Debounce the search box into the URL so every keystroke is not a request.
   useEffect(() => {
-    if (searchInput === search) return undefined
+    const next = searchInput.trim()
+    if (next === search) return undefined
     const timer = setTimeout(() => {
-      patchParams({ search: searchInput.trim(), industry: industry, page: null }, { replace: true })
+      patchParams({ search: next, page: null }, { replace: true })
     }, 300)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput, search])
 
-  // Fetch companies from live API. Fall back to mock data on error.
   useEffect(() => {
-    let cancelled = false
-    setStatus('loading')
-    api.list('/companies', {
-      params: { search: searchInput.trim(), industry, limit: pageSize, offset: (page - 1) * pageSize },
-    }).then((data) => {
-      if (!cancelled) {
+    const controller = new AbortController()
+    setLoadState('loading')
+    setError(null)
+
+    listCompanies(
+      {
+        search: search || undefined,
+        industry: industry || undefined,
+        limit: COMPANIES_PAGE_SIZE,
+        offset: (page - 1) * COMPANIES_PAGE_SIZE,
+      },
+      controller.signal,
+    )
+      .then((data) => {
         setRows(data.items)
         setTotal(data.total)
-        setStatus('ready')
-        // Populate industry filter from live data
-        api.listIndustryOptions({ signal: new AbortController().signal }).then((opts) => {
-          if (!cancelled) setIndustries(opts)
-        })
-      }
-    }).catch((err) => {
-      if (!cancelled && err?.status !== 401) {
-        setStatus('error')
-        setError(err?.message || 'Could not load companies')
-        // Fallback to mock data so the page renders even without a running backend
-        setRows(mockCompanies)
-        setTotal(mockCompanies.length)
-        setIndustries(['Technology', 'Manufacturing', 'Science', 'Software', 'Financial Services'])
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [searchInput, industry, page])
+        setLoadState('ready')
+      })
+      .catch((caught) => {
+        if (caught?.name === 'AbortError') return
+        setError(caught)
+        setLoadState(caught?.status === 403 ? 'denied' : 'error')
+      })
+
+    return () => controller.abort()
+  }, [search, industry, page, refreshKey])
+
+  // Industry options are sampled from existing records; the API has no index.
+  useEffect(() => {
+    const controller = new AbortController()
+    listIndustryOptions(controller.signal)
+      .then((options) => setIndustries(options))
+      .catch((caught) => {
+        if (caught?.name !== 'AbortError') setIndustries([])
+      })
+    return () => controller.abort()
+  }, [refreshKey])
 
   function patchParams(patch, options = {}) {
     const next = new URLSearchParams(params)
@@ -151,9 +131,7 @@ export function CompaniesPage() {
     setParams(new URLSearchParams(), { replace: true })
   }
 
-  function clearSelection() {
-    setSelectedKeys(new Set())
-  }
+  const hasFilters = Boolean(search || industry)
 
   const columns = [
     {
@@ -195,13 +173,11 @@ export function CompaniesPage() {
     {
       key: 'updated',
       header: 'Updated',
-      render: (row) => (
-        <span className="companies__muted">{formatDate(row.updatedAt)}</span>
-      ),
+      render: (row) => <span className="companies__muted">{formatDate(row.updatedAt)}</span>,
     },
   ]
 
-  const emptyState = search || industry ? (
+  const emptyState = hasFilters ? (
     <EmptyState
       compact
       icon={Search}
@@ -211,8 +187,9 @@ export function CompaniesPage() {
         <Button variant="ghost" size="sm" onClick={resetFilters}>
           Clear filters
         </Button>
-      } />
-    ) : (
+      }
+    />
+  ) : (
     <EmptyState
       compact
       icon={Building}
@@ -229,7 +206,8 @@ export function CompaniesPage() {
             Add your first company
           </Button>
         ) : undefined
-      } />
+      }
+    />
   )
 
   return (
@@ -251,7 +229,7 @@ export function CompaniesPage() {
           </>
         }
         actions={
-          canWrite && status !== 'denied' ? (
+          canWrite ? (
             <Button variant="primary" leadingIcon={Plus} onClick={() => setFormOpen(true)}>
               New company
             </Button>
@@ -271,14 +249,15 @@ export function CompaniesPage() {
         </div>
       ) : null}
 
-      {status === 'denied' ? (
+      {loadState === 'denied' ? (
         <section className="app-card companies__denied">
           <span className="companies__denied-icon" aria-hidden="true">
             <Lock size={22} />
           </span>
           <h2>Companies are restricted</h2>
           <p>
-            {error?.message || 'Your role does not allow access to company records. Ask an owner or admin for access.'}
+            {error?.message ||
+              'Your role does not allow access to company records. Ask an owner or admin for access.'}
           </p>
           <div className="companies__denied-actions">
             <Button
@@ -312,71 +291,24 @@ export function CompaniesPage() {
             />
           </FilterBar>
 
-          {canWrite && selectedKeys.size > 0 ? (
-            <div className="companies__bulk" role="region" aria-label="Bulk actions">
-              <span className="companies__bulk-count">
-                <strong>{selectedKeys.size.toLocaleString()}</strong>{' '}
-                {selectedKeys.size === 1 ? 'company selected' : 'companies selected'}
-              </span>
-              <div className="companies__bulk-actions">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  leadingIcon={Archive}
-                  onClick={() => {
-                    setArchiveError(null)
-                    setArchiveOpen(true)
-                  }}
-                  disabled={Boolean(archiveOpen)}
-                >
-                  Archive
-                </Button>
-                {canWrite && selectedKeys.size > 0 ? (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => {
-                      setError(null)
-                      setBulkOpen(true)
-                    }}
-                    disabled={Boolean(archiveOpen)}
-                  >
-                    Update fields
-                  </Button>
-                ) : null}
-                <Button
-                  variant="quiet"
-                  size="sm"
-                  onClick={clearSelection}
-                  disabled={Boolean(archiveOpen)}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
           <DataTable
             caption="Companies"
             columns={columns}
             rows={rows}
             getRowKey={(row) => row.id}
-            loading={status === 'loading'}
+            loading={loadState === 'loading'}
             skeletonRows={6}
-            error={status === 'error' ? error : null}
+            error={loadState === 'error' ? error : null}
             onRetry={() => setRefreshKey((key) => key + 1)}
             empty={emptyState}
-            selectable={canWrite}
-            selectedKeys={selectedKeys}
-            onSelectionChange={setSelectedKeys}
             onRowClick={(row) => navigate(`/app/companies/${row.id}`)}
             rowLabel={(row) => `Open ${row.name}`}
           />
 
-          {status === 'ready' && total > 0 ? (
+          {loadState === 'ready' && total > 0 ? (
             <Pagination
               page={page}
-              pageSize={pageSize}
+              pageSize={COMPANIES_PAGE_SIZE}
               total={total}
               onPageChange={(nextPage) => patchParams({ page: nextPage > 1 ? nextPage : null })}
               itemLabel="companies"
@@ -393,30 +325,6 @@ export function CompaniesPage() {
         onSaved={() => {
           setFormOpen(false)
           setRefreshKey((key) => key + 1)
-        }}
-      />
-
-      <BulkUpdateModal
-        open={bulkOpen}
-        count={selectedKeys.size}
-        companies={companies}
-        running={false}
-        progress={null}
-        error={null}
-        onClose={() => {
-          if (bulkOpen) return
-          setBulkOpen(false)
-        }}
-        onApply={() => toast.info('Bulk update feature coming soon')}
-      />
-
-      <MergeDuplicatesModal
-        open={mergeOpen}
-        companies={companies}
-        onClose={() => setMergeOpen(false)}
-        onMerged={() => {
-          setRefreshKey((key) => key + 1)
-          clearSelection()
         }}
       />
     </div>

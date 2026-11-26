@@ -27,9 +27,10 @@ function num(value) {
  * windows explicitly instead of a fake selectable range, and keeps the
  * "delivered is not observable" honesty note.
  *
- * T47 additions: usage & limits warnings (§5.9.2), system health metrics
- * (§5.9.3), support access panel (§5.9.5), abuse monitoring signals
- * (§5.9.6).
+ * Only metrics the endpoint actually returns are shown. Delivery confirmation,
+ * complaint, bounce and platform-wide health signals are not exposed to tenant
+ * callers, so this page never fabricates them (that reporting belongs to the
+ * platform admin console, T47).
  */
 export function DashboardPage() {
   const [status, setStatus] = useState('loading')
@@ -86,6 +87,9 @@ export function DashboardPage() {
   )
   const mailboxesHealthy = accounts.filter((account) => explainMailboxHealth(account).status === 'connected').length
 
+  const sentToday = Number(summary?.sent_today ?? 0)
+  const dailyCap = Number(summary?.daily_send_cap ?? 0)
+
   if (status === 'loading') {
     return (
       <div className="app-page dashboard-page">
@@ -111,8 +115,6 @@ export function DashboardPage() {
     )
   }
 
-  const sentToday = Number(summary.sent_today ?? 0)
-  const dailyCap = Number(summary.daily_send_cap ?? 0)
   const capPercent = dailyCap > 0 ? Math.min(100, Math.round((sentToday / dailyCap) * 100)) : 0
   const topCampaigns = Array.isArray(summary.top_campaigns) ? summary.top_campaigns : []
   const maxStageCount = Math.max(1, ...pipeline.map((entry) => Number(entry?.count ?? 0)))
@@ -125,7 +127,7 @@ export function DashboardPage() {
       tone: 'neutral',
       note: `Provider-accepted sends. 7-day: ${num(summary.messages_sent_7d)}. Today: ${num(sentToday)} of ${
         dailyCap > 0 ? `${num(dailyCap)} cap` : 'no cap set'
-      }.${sentToday >= dailyCap * 0.8 && dailyCap > 0 ? ' <span style="color: var(--warning)">Approaching daily cap — consider pausing or upgrading.</span>' : ''}`,
+      }.${dailyCap > 0 && sentToday >= dailyCap * 0.8 ? ' Approaching the daily cap.' : ''}`,
     },
     {
       key: 'replies',
@@ -176,96 +178,7 @@ export function DashboardPage() {
       tone: 'info',
       note: 'Tasks in the open or in-progress statuses.',
     },
-    // T47: AI generations and storage
-    {
-      key: 'ai-generations',
-      label: 'AI Generations',
-      value: num(summary.ai_generations_total ?? 0),
-      tone: 'neutral',
-      note: 'AI-assisted drafts and suggestions generated this period.',
-    },
-    {
-      key: 'storage',
-      label: 'Storage',
-      value: num(summary.storage_used_bytes ?? 0),
-      tone: 'neutral',
-      note: 'Used storage across all mailboxes and attachments.',
-    },
   ]
-
-  // T47: System health indicators computed from summary data
-  const healthMetrics = useMemo(() => {
-    const items = []
-
-    // Queue depth estimate
-    const sent = Number(summary.messages_sent_total ?? 0)
-    const queueStatus = sent > 500 ? 'healthy' : sent > 100 ? 'degraded' : 'healthy'
-    items.push({
-      label: 'Queue depth',
-      status: queueStatus,
-      tone: queueStatus === 'healthy' ? 'success' : queueStatus === 'degraded' ? 'warning' : 'danger',
-      note: sent > 0 ? `${sent} total sends processed` : 'No sends yet',
-    })
-
-    // Provider error rates
-    const providerErrors = Number(summary.provider_errors_7d ?? 0)
-    const providerStatus =
-      providerErrors > 50 ? 'critical' : providerErrors > 10 ? 'degraded' : 'healthy'
-    items.push({
-      label: 'Provider errors (7d)',
-      status: providerStatus,
-      tone:
-        providerStatus === 'healthy'
-          ? 'success'
-          : providerStatus === 'degraded'
-            ? 'warning'
-            : 'danger',
-      note: `${providerErrors} errors reported`,
-    })
-
-    // Webhook failure rate
-    const webhookFailures = Number(summary.webhook_failures_7d ?? 0)
-    const webhookStatus =
-      webhookFailures > 20 ? 'critical' : webhookFailures > 5 ? 'degraded' : 'healthy'
-    items.push({
-      label: 'Webhook failures (7d)',
-      status: webhookStatus,
-      tone:
-        webhookStatus === 'healthy'
-          ? 'success'
-          : webhookStatus === 'degraded'
-            ? 'warning'
-            : 'danger',
-      note: `${webhookFailures} failures reported`,
-    })
-
-    // API p95 latency (simple health marker)
-    items.push({
-      label: 'API p95 latency',
-      status: 'healthy',
-      tone: 'success',
-      note: 'Within normal range',
-    })
-
-    // Sending success rate
-    const delivered = Number(summary.messages_delivered_total ?? summary.messages_sent_total ?? 0)
-    const successRate = sent > 0 ? Number((delivered / sent) * 100).toFixed(1) : '100'
-    const successStatus =
-      successRate >= 95 ? 'healthy' : successRate >= 90 ? 'degraded' : 'critical'
-    items.push({
-      label: 'Sending success rate',
-      status: successStatus,
-      tone:
-        successStatus === 'healthy'
-          ? 'success'
-          : successStatus === 'degraded'
-            ? 'warning'
-            : 'danger',
-      note: `${successRate}% of provider-accepted sends delivered`,
-    })
-
-    return items
-  }, [summary, sentToday, dailyCap])
 
   return (
     <div className="app-page dashboard-page">
@@ -278,16 +191,19 @@ export function DashboardPage() {
             Refresh
           </Button>
         }
+        meta={
+          <>
+            <Badge tone="neutral" dot>
+              As of {summary?.as_of ?? '—'}
+            </Badge>
+            <Badge tone={accounts.length === 0 ? 'neutral' : mailboxesHealthy === accounts.length ? 'success' : 'warning'} dot>
+              {accounts.length === 0
+                ? 'No mailboxes connected'
+                : `${mailboxesHealthy}/${accounts.length} mailboxes healthy`}
+            </Badge>
+          </>
+        }
       />
-
-      <meta>
-        <Badge tone="neutral" dot>
-          As of {summary?.as_of}
-        </Badge>
-        <Badge tone="info" dot>
-          {mailboxesHealthy}/{accounts.length} mailboxes healthy
-        </Badge>
-      </meta>
 
       <section className="dashboard-page__metrics" aria-label="Summary metrics">
         {metrics.map((metric) => (
@@ -295,88 +211,11 @@ export function DashboardPage() {
             <div className="dashboard-page__metric-top">
               <span>{metric.label}</span>
               <strong>{metric.value}</strong>
-              <p>{metric.note}</p>
             </div>
+            <p>{metric.note}</p>
           </article>
         ))}
       </section>
-
-      {/* T47: System health panel — rendered within the dashboard grid */}
-      {summary && (
-        <section className="dashboard-page__grid">
-          <section className="app-card dashboard-page__panel">
-            <div className="dashboard-page__panel-head">
-              <div>
-                <p className="eyebrow">System health</p>
-                <h2>Platform metrics</h2>
-              </div>
-            </div>
-
-            <div>
-              {healthMetrics.map((m) => (
-                <div
-                  key={m.label}
-                  style={{
-                    borderColor: m.tone === 'success' ? '--success' : m.tone === 'warning' ? '--warning' : '--danger',
-                    marginBottom: '12px',
-                  }}
-                >
-                  <strong>{m.label}</strong>
-                  <span>{m.status}{m.note && <span> {m.note}</span>}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="app-card dashboard-page__panel">
-            <div className="dashboard-page__panel-head">
-              <div>
-                <p className="eyebrow">Abuse monitoring</p>
-                <h2>Deliverability signals</h2>
-              </div>
-            </div>
-
-            <div>
-              <div
-                style={{
-                  borderColor: 'rgba(239, 68, 68, 0.3)',
-                  background: 'rgba(239, 68, 68, 0.05)',
-                  marginBottom: '12px',
-                  padding: '8px 12px',
-                  borderRadius: '4px',
-                }}
-              >
-                <strong>Complaint rate</strong>
-                <span>Spam complaints per 1000 sends</span>
-              </div>
-              <div
-                style={{
-                  borderColor: 'rgba(245, 158, 11, 0.3)',
-                  background: 'rgba(245, 158, 11, 0.05)',
-                  marginBottom: '12px',
-                  padding: '8px 12px',
-                  borderRadius: '4px',
-                }}
-              >
-                <strong>Bounce rate</strong>
-                <span>Hard bounces per 1000 sends</span>
-              </div>
-              <div
-                style={{
-                  borderColor: 'rgba(34, 197, 94, 0.3)',
-                  background: 'rgba(34, 197, 94, 0.05)',
-                  marginBottom: '12px',
-                  padding: '8px 12px',
-                  borderRadius: '4px',
-                }}
-              >
-                <strong>Unsubscribe rate</strong>
-                <span>Opt-outs per 1000 sends</span>
-              </div>
-            </div>
-          </section>
-        </section>
-      )}
 
       <div className="dashboard-page__grid">
         <section className="app-card dashboard-page__panel">

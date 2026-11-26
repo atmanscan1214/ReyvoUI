@@ -1,123 +1,124 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams, useRouteError } from 'react-router-dom'
-import { Badge, Button, Modal, PageHeader } from '../../../components/ui'
-import { useToast } from '../../../lib/useToast'
+import { useParams } from 'react-router-dom'
+import { Button, Modal, PageHeader, useToast } from '../../../components/ui'
 import { api } from '../../../lib/api'
 
 /**
- * Unsubscribe page (T48, §5.12).
+ * Public unsubscribe page (T48, §5.12).
  *
- * The URL contains a signed, time-limited token (`/u/{token}`) that encodes
- * the tenant ID and contact ID.  The token is verified server-side and is
- * valid for 90 days by default.
+ * The link in a campaign email carries a signed, time-limited token
+ * (`/u/{token}`) that encodes the tenant and contact. The page works signed out:
  *
- * - GET: shows the confirmation page with agency name and masked email
- * - POST: records the unsubscribe, creates a suppression, marks the contact
- *   UNSUBSCRIBED.  Idempotent — if already suppressed, still returns success.
- * - Expired/invalid tokens show an appropriate error message.
- *
- * Design (§5.12):
- *   - signed token includes tenant, contact, message, and expiry (default 90 days)
- *   - the page shows the agency name and a confirmation
- *   - one-click POST is idempotent
- *   - the record is written even if the contact was already suppressed
- *   - done when: the page works signed out and records the opt-out exactly once
+ * - `GET /u/{token}` returns the agency name and the masked recipient address.
+ * - `POST /u/{token}` records the opt-out, creates a suppression, and marks the
+ *   contact `unsubscribed`. It is idempotent, so a second click is harmless.
+ * - An expired or invalid token renders an explanatory error instead.
  */
+/**
+ * Token problems come back as 4xx from `/u/{token}`; those mean the link
+ * itself is unusable, so the page explains that instead of echoing a generic
+ * auth or validation message.
+ */
+function linkErrorMessage(caught) {
+  if ([400, 401, 403, 404, 410, 422].includes(caught?.status)) {
+    return 'This unsubscribe link is not valid or has expired.'
+  }
+  return caught?.message || 'This unsubscribe link is not valid or has expired.'
+}
+
 export function UnsubscribePage() {
   const { token } = useParams()
-  const [showModal, setShowModal] = useState(false)
-  const [unsubscribed, setUnsubscribed] = useState(false)
+  const { toast } = useToast()
+
+  const [view, setView] = useState('loading')
   const [error, setError] = useState(null)
   const [tenantName, setTenantName] = useState('')
   const [maskedEmail, setMaskedEmail] = useState('')
-  const [loading, setLoading] = useState(true)
-  const { showError, success } = useToast()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!token) {
-      setError('No unsubscribe token provided.')
-      setLoading(false)
-      return
+      setError('No unsubscribe token was provided.')
+      setView('error')
+      return undefined
     }
 
-    api.get(`/u/${token}`)
-      .then((res) => {
-        setTenantName(res.tenant_name)
-        setMaskedEmail(res.masked_email)
-        setShowModal(true)
-        setLoading(false)
+    let cancelled = false
+    setView('loading')
+
+    api
+      .get(`/u/${encodeURIComponent(token)}`)
+      .then((data) => {
+        if (cancelled) return
+        setTenantName(data?.tenant_name ?? '')
+        setMaskedEmail(data?.masked_email ?? '')
+        setView('ready')
       })
       .catch((caught) => {
-        // Handle expired/invalid token
-        const msg =
-          caught?.message || 'This unsubscribe link is not valid or has expired.'
-        setError(msg)
-        setLoading(false)
+        if (cancelled) return
+        setError(linkErrorMessage(caught))
+        setView('error')
       })
+
+    return () => {
+      cancelled = true
+    }
   }, [token])
 
-  function handleUnsubscribe() {
-    if (!token) return
-    setLoading(true)
-    api.post(`/u/${token}`).then(
-      (res) => {
-        setUnsubscribed(true)
-        setLoading(false)
-        success(res.message || 'You have been unsubscribed.')
-        // Redirect after a brief delay
-        setTimeout(() => {
-          window.location.href = '/'
-        }, 2500)
-      },
-      (caught) => {
-        setError(caught?.message || 'Failed to unsubscribe. Please try again.')
-        setLoading(false)
-      }
-    )
+  async function handleUnsubscribe() {
+    if (!token || submitting) return
+    setSubmitting(true)
+    try {
+      const data = await api.post(`/u/${encodeURIComponent(token)}`)
+      setConfirmOpen(false)
+      setView('done')
+      toast.success(data?.message || 'You have been unsubscribed.')
+    } catch (caught) {
+      setConfirmOpen(false)
+      setError(linkErrorMessage(caught))
+      setView('error')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  if (loading) {
+  if (view === 'loading') {
     return (
       <div className="app-page unsubscribe-page">
         <PageHeader
           eyebrow="Unsubscribe"
-          title="Loading…"
-          description="Verifying your unsubscribe link…"
+          title="Checking your link…"
+          description="Verifying your unsubscribe link."
         />
       </div>
     )
   }
 
-  if (error) {
+  if (view === 'error') {
     return (
       <div className="app-page unsubscribe-page">
-        <PageHeader
-          eyebrow="Unsubscribe"
-          title="Unsubscribe link expired"
-          description={error}
-        />
-        <Button
-          variant="primary"
-          onClick={() => (window.location.href = '/')}
-        >
+        <PageHeader eyebrow="Unsubscribe" title="This link cannot be used" description={error} />
+        <Button variant="primary" onClick={() => (window.location.href = '/')}>
           Return to homepage
         </Button>
       </div>
     )
   }
 
-  if (unsubscribed) {
+  if (view === 'done') {
     return (
       <div className="app-page unsubscribe-page">
         <PageHeader
           eyebrow="Unsubscribe"
-          title="Unsubscribed"
-          description="You have been unsubscribed and will not receive further emails."
+          title="You are unsubscribed"
+          description={
+            tenantName
+              ? `You will not receive further commercial emails from ${tenantName}.`
+              : 'You will not receive further commercial emails from this agency.'
+          }
         />
-        <Button
-          variant="primary"
-          onClick={() => (window.location.href = '/')}
-        >
+        <Button variant="primary" onClick={() => (window.location.href = '/')}>
           Return to homepage
         </Button>
       </div>
@@ -129,45 +130,55 @@ export function UnsubscribePage() {
       <PageHeader
         eyebrow="Unsubscribe"
         title="Unsubscribe confirmation"
-        description="You are about to unsubscribe from emails sent by {tenantName}."
+        description={
+          tenantName
+            ? `You are about to unsubscribe from emails sent by ${tenantName}.`
+            : 'You are about to unsubscribe from this agency’s emails.'
+        }
       />
 
       <div className="unsubscribe-page__details">
-        <p>
-          <strong>Agency:</strong> {tenantName}
-        </p>
-        <p>
-          <strong>Email:</strong> {maskedEmail}
-        </p>
+        {tenantName ? (
+          <p>
+            <strong>Agency:</strong> {tenantName}
+          </p>
+        ) : null}
+        {maskedEmail ? (
+          <p>
+            <strong>Email:</strong> {maskedEmail}
+          </p>
+        ) : null}
       </div>
 
+      <Button variant="primary" onClick={() => setConfirmOpen(true)}>
+        Unsubscribe
+      </Button>
+
       <Modal
-        open={true}
-        title="Unsubscribe"
-        description="You are about to unsubscribe from emails sent by {tenantName}. This action cannot be undone. You will not receive further commercial emails from this agency."
-        size="lg"
-        onClose={() => setShowModal(false)}
+        open={confirmOpen}
+        title="Confirm unsubscribe"
+        description={
+          tenantName
+            ? `This stops all future commercial emails from ${tenantName}.`
+            : 'This stops all future commercial emails from this agency.'
+        }
+        size="md"
+        onClose={submitting ? undefined : () => setConfirmOpen(false)}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setShowModal(false)}>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleUnsubscribe}
-              disabled={loading}
-            >
-              {loading ? 'Unsubscribing…' : 'Unsubscribe'}
+            <Button variant="danger" onClick={handleUnsubscribe} loading={submitting}>
+              {submitting ? 'Unsubscribing…' : 'Unsubscribe'}
             </Button>
           </>
         }
       >
         <p>
-          By clicking Unsubscribe, you will opt-out of all future commercial
-          emails from {tenantName}. A suppression record will be created and
-          your contact status will be set to UNSUBSCRIBED. This action is
-          idempotent — if you were already unsubscribed, the same result will
-          occur.
+          A suppression record will be created and your contact status will be set to
+          unsubscribed. You will not receive further commercial emails from this agency. If you
+          were already unsubscribed, nothing changes.
         </p>
       </Modal>
     </div>

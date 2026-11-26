@@ -173,16 +173,18 @@ function isFormData(body) {
 async function request(path, { method = 'GET', body, token, signal, responseType, paginate, filter, cacheKey } = {}) {
   let response
 
+  const formData = isFormData(body)
+  const idempotencyKey = token && body && !formData ? generateIdempotencyKey() : null
+
   try {
     // Build request options
-    const formData = isFormData(body)
     const init = {
       method,
       headers: {
         Accept: 'application/json',
         ...(body && !formData ? { 'Content-Type': 'application/json' } : null),
         ...(token ? { Authorization: `Bearer ${token}` } : null),
-        ...(token && body && !formData ? { 'Idempotency-Key': generateIdempotencyKey() } : null),
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : null),
       },
       ...(body ? { body: formData ? body : JSON.stringify(body) } : null),
     }
@@ -219,7 +221,7 @@ async function request(path, { method = 'GET', body, token, signal, responseType
       details: envelope?.details,
       fieldErrors: collectFieldErrors(envelope?.details),
       requestId: envelope?.request_id,
-      idempotencyKey: init?.['Idempotency-Key'] ?? null,
+      idempotencyKey,
     })
   }
 
@@ -362,8 +364,10 @@ const api = {
   updateMe: (payload) => authedRequest('/auth/me', { method: 'PATCH', body: payload }),
   requestEmailChange: (payload) =>
     authedRequest('/auth/email-change', { method: 'POST', body: payload }),
+  // Confirmation is opened from an email link, so it must work without a session.
   confirmEmailChange: (payload) =>
-    authedRequest('/auth/email-change/confirm', { method: 'POST', body: payload }),
+    request('/auth/email-change/confirm', { method: 'POST', body: payload }),
+  cancelEmailChange: () => authedRequest('/auth/email-change', { method: 'DELETE' }),
   changePassword: (payload) =>
     authedRequest('/auth/password/change', { method: 'POST', body: payload }),
   sessions: (signal) => authedRequest('/auth/sessions', { signal }),

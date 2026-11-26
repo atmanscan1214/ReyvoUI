@@ -57,6 +57,20 @@ npm run build     # writes dist/
 npm run preview   # serve the build locally
 ```
 
+### Tests
+
+```bash
+npm test          # Vitest unit tests (src/**/*.{test,spec}.{js,jsx,ts,tsx})
+npm run test:e2e  # Playwright: public smoke checks + signed-in flows
+```
+
+- `npm test` runs unit tests only; Playwright specs in `e2e/` are excluded in `vitest.config.ts`.
+- `npm run test:e2e` starts Vite itself (`webServer` in `playwright.config.ts`) and reuses an
+  already-running server outside CI. Set `PLAYWRIGHT_BASE_URL` to point at another origin.
+- The signed-in E2E flows need the API on `http://127.0.0.1:8000` and skip themselves with a clear
+  message when `/health` is unreachable. Defaults target the seeded demo workspace; override with
+  `E2E_EMAIL`, `E2E_PASSWORD`, and `E2E_API_URL`.
+
 ## Configuration
 
 Copy `.env.example` to `.env` if you need to override the defaults.
@@ -83,6 +97,7 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app`      | Dashboard           | Live `GET /dashboard/summary` metrics, pipeline-by-stage, server-computed top campaigns, live inbox health + suppression count; windows are server-side (no range/timezone param), delivered is not observable |
 | `/app/settings/security` | Security | Two-factor enrollment, disable, and the password-reset entry point |
 | `/app/settings/account` | Account | Profile, email change, password change, and active sessions |
+| `/app/settings/data` | Data & privacy | Owner-only ZIP export of six CSV sections and 30-day workspace deletion with typed-name confirmation |
 | `/app/companies` | Companies | Live company list with search, industry filter, pagination, and create |
 | `/app/companies/:companyId` | Company detail | Overview, notes, custom fields, attached people, edit, and delete |
 | `/app/contacts` | Contacts | Live list with filters, export, bulk archive/update, duplicate merge, tags column, and create |
@@ -108,6 +123,8 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
 | `/privacy`  | Privacy Policy      | Static legal copy                                            |
+| `/app/status` | Service status    | Live `GET /health` + `GET /health/ready` probes (proxied); shows operational, degraded, or unavailable |
+| `/u/:token` | Unsubscribe         | Public, signed-out opt-out: token check, agency and masked address, single idempotent confirm; invalid/expired tokens get a clear message |
 | `*`         | Not found           | Friendly 404 with links back                                  |
 
 The `/app` shell owns the sidebar, top bar, notification and account menus, mobile drawer, skip
@@ -165,6 +182,7 @@ src/
     mfa/             MfaChallengePage.jsx
     welcome/         WelcomeLayout, checklist, address form, verify-email + welcome.css
     app/             AppLayout, AreaGuard, placeholder screens, navigation model, app.css
+      settings/      WorkspaceSettingsPage, DataPrivacyPage (ZIP export + 30-day delete) + settings.css
       security/      SecurityPage.jsx + security.css
       companies/     CompaniesPage, CompanyDetailPage, CompanyFormModal + companies.css
       contacts/      ContactsPage, ContactDetailPage, ContactFormModal, CompanyPicker, BulkUpdateModal, MergeDuplicatesModal + contacts.css

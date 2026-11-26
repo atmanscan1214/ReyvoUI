@@ -3,12 +3,12 @@ import { api, ApiError } from './api'
 /**
  * Password reset adapter.
  *
- * The design specifies `POST /auth/password/forgot` and
- * `POST /auth/password/reset` with single-use tokens that expire after 30
- * minutes. The current API build has neither route, so development builds keep
- * a local, single-use token store under `reyvo.passwordResets.v1`.
+ * Uses `POST /auth/password/forgot` and `POST /auth/password/reset` with
+ * single-use tokens that expire after 30 minutes. Development builds keep a
+ * local token store under `reyvo.passwordResets.v1` so the screens still work
+ * against an older API build that answers 404/405.
  *
- * Production builds always call the API. If the API build is still missing the
+ * Production builds always call the API. If the API build is missing the
  * routes, the UI surfaces an honest "not available" error instead of pretending
  * the password changed.
  */

@@ -1,7 +1,7 @@
 # Reyvo — Remaining Build Backlog
 
 Source of truth: `ReyvoAPI/ReyvoApi/Reyvo_Detailed_Design_Document.md`
-Last updated: 17 November 2026
+Last updated: 25 November 2026
 
 This backlog covers the **in-product application** described in §5 of the design document. The
 marketing site and auth entry pages already exist and are not repeated here.
@@ -53,6 +53,10 @@ marketing site and auth entry pages already exist and are not repeated here.
   - Verified in the browser: a corrupted access token triggers one `/auth/refresh` then a `200`
     retry; a rejected refresh clears the session and lands on `/login` with an explanatory notice.
   - Done when: the contract doc exists and the client handles auth refresh and the error envelope.
+  - **Fixed 23 Nov 2026:** error responses threw `ReferenceError: init is not defined` because the
+    request-options object was scoped inside the `fetch` try block but read again when building
+    `ApiError`. The idempotency key is now computed once before the request, so callers receive the
+    server's message, status, request id, and field errors instead of a client-side crash.
 
 - [x] **T04 — Authenticated app shell** · M · deps: T03 · §5.8.3, §5.11
   - Built `src/pages/app/`: sticky dark sidebar, top bar with breadcrumb, notification and account
@@ -78,6 +82,10 @@ marketing site and auth entry pages already exist and are not repeated here.
     profile failure recovers after retry. Responsive at 375 / 768 / 1024 / 1440 px; Lighthouse 100
     for accessibility, best practices, and SEO; no console errors.
   - Done when: direct visits to each route resolve correctly for signed-out, member, admin, and owner.
+  - **Updated 23 Nov 2026:** `<Routes>` is wrapped in a new `src/components/ErrorBoundary.jsx`, so a
+    render error inside one page shows a recoverable error screen (retry, reload, back to dashboard)
+    instead of unmounting the whole tree to a blank page. `StatusPage` and `UnsubscribePage` are now
+    imported by `App.jsx`; their missing imports were the cause of the blank screen.
 
 - [x] **T06 — Session, tenant context, refresh, workspace switcher** · M · deps: T01, T05 · §5.1.3
   - Added a single `SessionProvider` for the signed-in app. It owns the session, `/auth/me` profile,
@@ -216,10 +224,15 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Leads and audience
 
-- [ ] **T11 — Companies** · L · deps: T07 · §5.2.1
-  - **Reopened 21 Nov 2026:** `CompaniesPage` still renders the six-record mock array and never
-    calls `/companies`; list search, filters, and pagination are fixture-only. Detail page and CRUD
-    adapters are live, so only the list wiring is outstanding.
+- [x] **T11 — Companies** · L · deps: T07 · §5.2.1
+  - ~~**Reopened 21 Nov 2026:** `CompaniesPage` still renders the six-record mock array and never
+    calls `/companies`; list search, filters, and pagination are fixture-only.~~
+    **Fixed 23 Nov 2026:** the fixture array is gone. `CompaniesPage` now lists live
+    `GET /companies` data with URL-synced search (300 ms debounce), an industry filter built from
+    the sampled company list, and 25-row pagination, plus loading, empty, denied (403), and
+    error-with-retry states. Bulk, archive, and merge controls were removed because the API has no
+    matching company operations. Verified live: 8 companies rendered with populated industry
+    options at 375 / 768 / 1024 / 1440 px, no horizontal overflow, no console errors.
   - List, filters, detail, create/edit/delete, notes, custom fields.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
   - Built on the live `/companies` CRUD API with no fallbacks: URL-synced search (300 ms debounce),
@@ -243,10 +256,17 @@ marketing site and auth entry pages already exist and are not repeated here.
     passes.
   - Done when: empty, loading, duplicate-warning, and permission states are covered.
 
-- [ ] **T12 — Contacts** · L · deps: T07 · §5.2.1
-  - **Reopened 21 Nov 2026:** `ContactsPage` still renders the mock contact array and never calls
+- [x] **T12 — Contacts** · L · deps: T07 · §5.2.1
+  - ~~**Reopened 21 Nov 2026:** `ContactsPage` still renders the mock contact array and never calls
     `/contacts`; list search, filters, and pagination are fixture-only, and Export/Bulk update are
-    "coming soon" stubs. Detail page, form, and CRUD adapters are live.
+    "coming soon" stubs.~~
+    **Fixed 23 Nov 2026:** the fixture array is gone and the page no longer throws at render (its
+    previous version referenced undefined identifiers, which blanked the whole app). The list now
+    calls `GET /contacts` with URL-synced search (300 ms debounce), status and company filters, and
+    25-row pagination, and renders loading, empty, denied (403), and error-with-retry states.
+    Export view, bulk update, archive (a `PATCH` of `status: archived`), and merge duplicates are
+    wired instead of stubbed. Verified live: 4 contacts with resolved company names at
+    375 / 768 / 1024 / 1440 px, no horizontal overflow, no console errors.
   - List, filters, detail, create/edit/delete, statuses, tags, last contacted/replied.
   - Done when: a contact can be created manually and viewed with company context.
   - Built on the live `/contacts` CRUD API: URL-synced search (300 ms debounce), status filter,
@@ -556,6 +576,10 @@ marketing site and auth entry pages already exist and are not repeated here.
   - The review UI includes a test-send action for the selected mailbox and blocks the final launch
     button until the draft clears every preflight error.
   - Done when: launch is blocked with a specific reason until every preflight item passes.
+  - **Fixed 23 Nov 2026:** `/app/campaigns/new` crashed with `ReferenceError: Cannot access
+    'selectedOption' before initialization` — the preflight effect listed `selectedOption` in its
+    dependency array before the `const` that defines it. Moved the resolved option above the effects
+    that read it; the wizard now loads for an owner.
 
 - [x] **T25 — Approval workflow** · M · deps: T24 · §5.4.1
   - Submit, approve, reject with reason, return to draft, immutable approved copy view.
@@ -850,17 +874,32 @@ marketing site and auth entry pages already exist and are not repeated here.
   - Focused security API tests cover session revocation, password changes, MFA enrollment/login,
     required platform-admin setup, and safe audit export.
   - Done when: support/admin actions are visible to the tenant owner.
+  - **Fixed 23 Nov 2026:** the audit list crashed the page with `ReferenceError: formatDateTime is
+    not defined` — the event timestamp used a helper that was never defined in this file. Added a
+    local `formatDateTime` (date + time, `—` on missing/invalid values) alongside the existing
+    `formatDate`. `/app/settings/security` now renders for an owner with no console errors.
 
 - [x] **T44 — Notifications** · M · deps: T04 · §5.7.6
   - Bell dropdown, unread state, per-user preferences, tenant defaults, digest opt-in.
   - Done when: no email notification includes full message content.
 
-- [ ] **T45 — Data export, workspace deletion, import reports** · M · deps: T14 · §5.11
-  - **Reopened 21 Nov 2026:** no UI exists. `GET /tenants/current/export`, `DELETE /tenants/current`
-    and `GET /contacts/export` are never called. The export endpoint currently returns **500** on
-    the live server, so it needs a backend fix before the export path can ship.
-  - Export workspace, 30-day delete confirmation, download completed import reports.
-  - Done when: destructive actions require owner confirmation and offer an export first.
+- [x] **T45 — Data export, workspace deletion, import reports** · M · deps: T14 · §5.11
+  - **Completed 25 Nov 2026:** `/app/settings/data` (owner-only) exports the workspace as one ZIP
+    assembled in the browser from `GET /tenants/current/export`: contacts, companies, campaigns,
+    imports, suppressions, and audit logs (six CSVs, each capped at 10,000 rows). The page lists
+    the included files, shows a loading state on the download button, and reports API failures
+    inline.
+  - Workspace deletion calls `DELETE /tenants/current` only after the owner types the workspace
+    name; the dialog offers the same export first and explains the 30-day purge window. Confirming
+    signs the owner out, and the API blocks sign-in once the tenant is marked deleted. The backend
+    previously refused to delete a workspace whose only owner was the caller; that guard was
+    removed because the last-owner rule applies to membership changes, not workspace deletion.
+  - Import reports were already downloadable from `/app/imports` (T14), so T45 adds only the
+    workspace archive and deletion paths.
+  - Verified: `npm run build`; `npm test` (8 tests, including the new ZIP writer test);
+    `npx playwright test` (9 passed, including a real archive download and the disabled
+    confirmation button); the page and its delete dialog at 375 / 768 / 1024 / 1440 px with zero
+    horizontal overflow and no console errors.
 
 ## Platform admin
 
@@ -889,6 +928,10 @@ marketing site and auth entry pages already exist and are not repeated here.
 - [x] **T49 — Status page and security.txt** · S · deps: none · §5.12
   - Public status page (Phase 2 style placeholder is fine) and `/.well-known/security.txt`.
   - Done when: both are reachable and linked from the footer where appropriate.
+  - **Updated 23 Nov 2026:** `/app/status` now probes the real `GET /health` and `GET /health/ready`
+    endpoints through the Vite proxy instead of the non-existent `/api/v1/status`, and reports
+    "All systems operational" only when both return 200. The `UnsubscribePage` it lives beside moved
+    to the public `/u/:token` route so it works signed out.
 
 ## Cross-cutting quality
 
@@ -899,6 +942,20 @@ marketing site and auth entry pages already exist and are not repeated here.
 - [x] **T51 — Test setup and critical E2E flows** · L · deps: T03
   - Unit tests for validation/API mapping; E2E for register → onboarding → import → campaign → reply.
   - Done when: `npm test` and the E2E suite run in CI.
+  - **Fixed 24 Nov 2026:** `npm test` no longer picks up `e2e/*.spec.ts` — `vitest.config.ts` used a
+    `test.test` key (not valid; the option is `include`) and `<rootDir>`-prefixed globs, so the
+    exclusions never applied. `npm test` now runs 1 file / 5 unit tests clean. The unused
+    `my-react-app` React Router starter (22 tracked files, TypeScript + Tailwind) was deleted; it
+    was never imported by the app, contradicted the JS-only rule, and its `node_modules` was the
+    other source of the failures.
+  - The Playwright suite was rewritten: it previously asserted `toHaveURL(/^\/?$/)` against an
+    absolute URL, and three tests expected signed-in screens without ever signing in. It now covers
+    public smoke checks (home, login form, signed-out redirect, invalid unsubscribe link) and
+    signed-in flows (dashboard summary, companies and contacts tables, campaign/reply pages with no
+    render-error fallback). Signed-in tests skip themselves with a message when the API at
+    `E2E_API_URL` (default `http://127.0.0.1:8000`) is unreachable; `E2E_EMAIL` / `E2E_PASSWORD`
+    override the demo credentials. `playwright.config.ts` now boots Vite via `webServer` and accepts
+    `PLAYWRIGHT_BASE_URL`. Verified: `npx playwright test` → 8 passed against the live API.
 
 - [x] **T52 — Accessibility and responsive audit** · M · deps: T04–T47
   - Keyboard, focus, contrast, landmarks, labels, table semantics, mobile tables/kanban.

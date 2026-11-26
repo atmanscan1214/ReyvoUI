@@ -31,6 +31,21 @@ function formatDate(value) {
   }
 }
 
+function formatDateTime(value) {
+  if (!value) return '—'
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(value))
+  } catch {
+    return '—'
+  }
+}
+
 export function SecurityPage() {
   usePageTitle('Security')
 
