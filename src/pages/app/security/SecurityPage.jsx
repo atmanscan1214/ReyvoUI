@@ -16,6 +16,7 @@ import {
 } from '../../../lib/mfa'
 import { useSession } from '../../../lib/session'
 import { usePageTitle } from '../../../lib/usePageTitle'
+import { getWorkspaceSupportAccess } from '../../../lib/platformAdmin'
 import './security.css'
 
 function formatDate(value) {
@@ -89,6 +90,10 @@ export function SecurityPage() {
   const [exportingAudit, setExportingAudit] = useState(false)
   const [exportError, setExportError] = useState(null)
 
+  const [supportGrants, setSupportGrants] = useState([])
+  const [supportStatus, setSupportStatus] = useState('loading')
+  const [supportError, setSupportError] = useState(null)
+
   useEffect(() => {
     if (!user?.id) return undefined
 
@@ -133,6 +138,26 @@ export function SecurityPage() {
 
     return () => controller.abort()
   }, [auditOffset, auditRefresh, auditSearch])
+
+  // T47: platform support access must be visible to the tenant while it is active.
+  useEffect(() => {
+    const controller = new AbortController()
+    setSupportStatus('loading')
+    setSupportError(null)
+
+    getWorkspaceSupportAccess(controller.signal)
+      .then((items) => {
+        setSupportGrants(Array.isArray(items) ? items : [])
+        setSupportStatus('ready')
+      })
+      .catch((error) => {
+        if (error?.name === 'AbortError') return
+        setSupportError(error?.message || 'We could not load platform support access.')
+        setSupportStatus('error')
+      })
+
+    return () => controller.abort()
+  }, [auditRefresh])
 
   // Keep the development helper code current while enrollment is open.
   useEffect(() => {
@@ -592,6 +617,43 @@ export function SecurityPage() {
               Account settings
               <ArrowRight size={15} />
             </Link>
+          </section>
+
+          <section className="app-card" aria-labelledby="support-access-heading">
+            <header className="security__mini-head">
+              <span className="security__mini-icon" aria-hidden="true">
+                <Shield size={18} />
+              </span>
+              <h2 id="support-access-heading">Platform support access</h2>
+            </header>
+            <p>
+              Reyvo platform staff can request time-boxed access to investigate a problem. Every
+              grant requires a reason and expires automatically; this list shows only grants that are
+              still active.
+            </p>
+            {supportStatus === 'loading' ? (
+              <p className="security__loading">Checking support access…</p>
+            ) : supportStatus === 'error' ? (
+              <p className="security__error" role="alert">
+                {supportError}
+              </p>
+            ) : supportGrants.length === 0 ? (
+              <p className="security__mini-note">
+                No platform staff currently have access to this workspace.
+              </p>
+            ) : (
+              <ul className="security__support-list">
+                {supportGrants.map((grant) => (
+                  <li key={grant.id}>
+                    <strong>{grant.reason}</strong>
+                    <span>
+                      Granted {formatDateTime(grant.granted_at)} · expires{' '}
+                      {formatDateTime(grant.expires_at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section className="app-card security__audit" aria-labelledby="audit-heading">

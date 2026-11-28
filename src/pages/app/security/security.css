@@ -458,6 +458,38 @@
   vertical-align: middle;
 }
 
+.security__support-list {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.security__support-list li {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid #e6d3a1;
+  border-radius: 10px;
+  background: #fdf7e8;
+}
+
+.security__support-list li > strong {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.security__support-list li > span {
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: #6b5014;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 960px) {
   .security-page {
     grid-template-columns: 1fr;

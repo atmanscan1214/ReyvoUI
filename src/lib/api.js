@@ -28,6 +28,11 @@ class PaginatedResponse {
     this.meta = meta
   }
 
+  /** Items in the current page, mirroring the raw `{ items, total }` shape. */
+  get items() {
+    return this.data
+  }
+
   get hasMore() {
     return this.meta.hasMore ?? false
   }
@@ -152,7 +157,7 @@ function cacheQuery(key, fn) {
   queryCache.set(key, new CacheEntry(result, Date.now()))
 
   // Evict oldest entries if over limit
-  if (queryCache.size > CACHE_MAX_ENTRIES) {
+  while (queryCache.size > CACHE_MAX_ENTRIES) {
     const firstKey = queryCache.keys().next().value
     queryCache.delete(firstKey)
   }
@@ -294,11 +299,18 @@ async function authedRequest(path, { method = 'GET', body, signal, responseType,
   // Proactive token refresh when about to expire
   if (isExpired(session) && session.refreshToken) {
     try {
-      // In a real implementation, would call refreshStoredSession()
-      // For now, proceed with current token
+      const pair = await request('/auth/refresh', {
+        method: 'POST',
+        body: { refresh_token: session.refreshToken },
+      })
+      if (pair?.access_token) {
+        session = saveSession(pair)
+      }
     } catch (error) {
-      // If refresh fails, clear session and re-authenticate
-      // notifySessionExpired()
+      // If refresh fails, clear session and trigger re-auth
+      clearSession()
+      triggerSessionExpired()
+      throw new ApiError('Session expired. Please sign in again.', { status: 401, code: 'token_expired' })
     }
   }
 

@@ -87,15 +87,15 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/`         | Home                | Marketing page: hero, product mock, features, personas, process, security, pricing, FAQ, CTA |
 | `/register` | Create workspace    | Validated registration form wired to `POST /auth/register`   |
 | `/login`    | Sign in             | `POST /auth/login`, optional workspace slug; challenges MFA-enrolled accounts |
-| `/forgot-password` | Forgot password | Neutral reset request; single-use 30-minute links (provisional; see below) |
+| `/forgot-password` | Forgot password | Neutral reset request; server-backed single-use 30-minute links |
 | `/reset-password` | Reset password   | New-password form from `?token=` with success, expired, invalid, and already-used states |
-| `/invite/:token` | Invitation accept | Join a workspace with a name, password, and terms (provisional; see below) |
-| `/mfa/challenge` | Two-factor challenge | Finish an MFA-protected sign-in (provisional; see below) |
+| `/invite/:token` | Invitation accept | Join a workspace with a name, password, and terms |
+| `/mfa/challenge` | Two-factor challenge | Finish an MFA-protected sign-in |
 | `/welcome`  | Setup checklist     | Live onboarding checklist: five steps derived from the API, with readiness and progress |
 | `/welcome/address` | Mailing address | Required physical address form wired to `PATCH /tenants/current` |
-| `/verify-email` | Verify email    | Verification status, auto-verify from a token, and resend (provisional; see below) |
+| `/verify-email` | Verify email    | Server-backed verification status, token confirmation, and resend |
 | `/app`      | Dashboard           | Live `GET /dashboard/summary` metrics, pipeline-by-stage, server-computed top campaigns, live inbox health + suppression count; windows are server-side (no range/timezone param), delivered is not observable |
-| `/app/settings/security` | Security | Two-factor enrollment, disable, and the password-reset entry point |
+| `/app/settings/security` | Security | Two-factor enrollment/disable, password reset, active sessions, tenant audit search/export, and the workspace-visible platform support-access card |
 | `/app/settings/account` | Account | Profile, email change, password change, and active sessions |
 | `/app/settings/data` | Data & privacy | Owner-only ZIP export of six CSV sections and 30-day workspace deletion with typed-name confirmation |
 | `/app/companies` | Companies | Live company list with search, industry filter, pagination, and create |
@@ -119,6 +119,9 @@ Copy `.env.example` to `.env` if you need to override the defaults.
 | `/app/reports` | Reports | Live report tables (campaign stats, replies, mailbox health, pipeline) plus a real client-side CSV export with injection protection |
 | `/app/billing` | Billing | Live usage vs plan limits with 80%/100% banners, real checkout/portal/plan-change posts, and paginated invoices; without Stripe, checkout/plan-change answer 503 and portal 400 (surfaced as-is), and billing history is an empty-state note |
 | `/app/admin` | Sending controls | Owner/admin: workspace pause, campaign and mailbox pause/resume on audited API endpoints; kill switch is platform-staff only (403 panel for tenant roles) |
+| `/app/platform` | Platform tenants | Platform staff only: searchable tenant list with plan, MRR, usage, abuse risk, and support-access state |
+| `/app/platform/:tenantId` | Tenant profile | Platform staff only: profile, usage, deliverability, support grants, and suspend/reactivate, trial, plan, credit, MFA, force-logout, and delete actions |
+| `/app/platform/ops` | Platform operations | Platform staff only: overview, health, audit search, support access, and abuse tabs |
 | `/app/*`    | App areas           | Team, settings, notifications, and the rest of `APP_AREAS` |
 | `/app/ui-kit` | Component kit     | Dev-only gallery for the shared UI kit; not part of the production route table |
 | `/terms`    | Terms of Service    | Static legal copy                                            |
@@ -136,32 +139,29 @@ Restricted routes are also guarded. Opening one directly shows a shared access-d
 current workspace, role, and required role instead of rendering the page. The guard waits for the
 profile request, shows a retry state if it fails, and never assumes denial while access is unknown.
 
-### Demo-grade screens
+### Browser-local and provider-dependent screens
 
-A second batch of screens was built as visual demos on top of fixture data while their endpoints
-are unavailable or not yet wired. `vulnerabilities.md` tracks the full live-endpoint audit.
+Most screens now read and write the live API. These remaining boundaries are deliberate and named in
+the UI rather than simulated:
 
-- **Contacts list** (`/app/contacts`) and **Companies list** (`/app/companies`) still render
-  hard-coded fixture arrays. Their adapters (`lib/contacts.js`, `lib/companies.js`) and detail
-  pages are live, and the lists ask the API for nothing — so search, filters, and pagination in
-  those two list views do not reflect workspace data yet.
-- **Workspace export / deletion** (T45) and the **platform admin console** (T46/T47:
-  `/admin/tenants*`, `/admin/audit-logs`) have no UI yet. `docs/openapi.json` exposes them.
-- **Billing** (`/app/billing`) reads live usage, plans, subscription, and paginated invoices and
-  posts real checkout/portal/plan-change requests. Without a configured Stripe key or plan price,
-  checkout and plan-change answer 503 and the portal answers 400 — each surfaced as-is from the
-  API, never simulated. The trial/grace/past-due/canceled and downgrade-blocked states are
-  verified against the live backend; only the provider round-trips (real Checkout, Customer Portal
-  session, invoice list from Stripe) await credentials — flagged in `TASKS.md`.
-- **Admin sending controls** (`/app/admin`) are live: workspace pause (`POST
-  /tenants/current/sending-pause`), campaign pause/resume, and mailbox pause all post to the API
-  and are audited. Only the global kill switch is staff-only — `/admin/sending-controls` answers
-  403 for tenant roles, so the page shows a "Platform staff only" panel instead of the control.
-- **AI settings and quota** (wizard) are browser-local (`localStorage`), while the generate call
-  itself hits the live `POST /ai/draft`.
-
-Treat these screens as placeholders: `TASKS.md` should keep them unchecked until they consume live
-data.
+- **Segments and contact tags** are stored per browser (`reyvo.segments.v1`,
+  `reyvo.contactTags.v1`) because this API build has no `/segments` or tag routes. The lists page
+  labels the storage, and campaign audiences resolve segments client-side.
+- **Import rollback** is browser-local (`reyvo.importRollbacks.v1`) for the same reason: the API has
+  no rollback endpoint, so the 24-hour window is device-scoped.
+- **AI approval mode and quota** are browser-local (`localStorage`), while the generate call itself
+  hits the live `POST /ai/draft`.
+- **Billing** reads live usage, plans, subscription, and paginated invoices and posts real
+  checkout/portal/plan-change requests. Without a configured Stripe key or plan price, checkout and
+  plan-change answer 503 and the portal answers 400 — each surfaced as-is from the API, never
+  simulated. Only the provider round-trips (real Checkout, Customer Portal session, invoice list
+  from Stripe) await credentials — flagged in `TASKS.md`.
+- **SMTP mailbox registration** (`POST /email-accounts/smtp`) is not surfaced yet; the UI covers the
+  OAuth providers and the live test-send endpoint.
+- **Platform staff** see the tenant and operations consoles at `/app/platform` and
+  `/app/platform/ops`. Tenant members never see the nav group, and the routes are guarded by the
+  `is_platform_admin` flag. The global kill switch remains on `/app/admin` and answers 403 for
+  tenant roles.
 
 ## Folder layout
 
@@ -198,6 +198,7 @@ src/
       reports/       ReportsPage + reports.css (live reports, real CSV export)
       billing/       BillingPage + billing.css (live usage vs plan limits; checkout/portal blocked without Stripe)
       admin/         AdminPage + admin.css (live lists + audited pause/kill-switch controls)
+      platform/      PlatformTenantsPage, PlatformTenantDetailPage, PlatformOpsPage + platform.css (T46/T47 staff consoles)
       ui-kit/        Dev-only component gallery + ui-kit.css
     legal/           LegalPage.jsx + legal.css (terms + privacy)
     not-found/       NotFoundPage.jsx + not-found.css
@@ -281,12 +282,12 @@ to send”. The app sidebar’s setup widget reads the same model through `useSe
 without a reload. Saving the address calls `PATCH /tenants/current` and applies the response through
 `updateTenant()`.
 
-**Backend gap:** this API build has no email-verification or resend endpoints. `api.verifyEmail()` and
-`api.resendVerification()` point at provisional `/auth/verify-email` and `/auth/resend-verification`
-paths. In development, a `404`/`405` falls back to a single-use, 24-hour challenge in
-`reyvo.onboarding.v1` and the email screen shows the link in a clearly labelled “Development only”
-panel. Production builds never fake verification: they surface an “unavailable on this API build”
-error instead. See [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#email-verification-not-implemented).
+**Verification is server-backed:** registration issues a 24-hour verification email. `/verify-email?token=`
+confirms the address, `POST /auth/resend-verification` re-sends with a cooldown, and a confirmed
+address does not lock sign-in — `UserStatus.ACTIVE` and `VERIFIED` both allow it, while only
+`DISABLED` blocks. The screen still degrades gracefully against an older API that answers `404`/`405`
+for these paths, but no local verification record is created on the current backend. See
+[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md).
 
 ### Password reset, invitations, and two-factor authentication
 
@@ -308,13 +309,14 @@ and clearly labelled development tools.
   tolerance, locks after five wrong codes, and renders **expired**, **invalid**, **already used**,
   locked, and signed-out states.
 
-The API build has none of these endpoints. Development builds call the provisional paths first,
-then fall back to single-use, correctly time-boxed records in `reyvo.passwordResets.v1`,
-`reyvo.mfa.v1`, and `reyvo.invites.v1`; each screen labels its “Development only” tools (valid,
-expired, invalid, and already-used links) so every state can be exercised without a mail server or
-an authenticator app. Production builds never fake these flows: they surface an
-“unavailable on this API build” error instead. See
-[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#password-reset-mfa-and-invitations-not-implemented).
+All three flows are server-backed on the current API: password reset uses
+`POST /auth/password/forgot` and `POST /auth/password/reset`, MFA uses the `/auth/mfa/*` routes, and
+invitations use the workspace invitation endpoints. Reset and email-change tokens are single-use and
+time-boxed; completing a reset or email change revokes the other sessions, and MFA setup is required
+before a platform administrator can use the staff console. Development fallbacks in
+`reyvo.passwordResets.v1`, `reyvo.mfa.v1`, and `reyvo.invites.v1` are retained only for an older API
+that answers `404`/`405`, and each screen labels those tools as development-only. See
+[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md).
 
 ### Account settings
 
@@ -330,12 +332,13 @@ an authenticator app. Production builds never fake these flows: they surface an
   marker. Individual sign-out, “sign out other sessions”, and “sign out everywhere” all require
   confirmation; the global action returns to `/login`.
 
-The API build exposes only `GET /auth/me`, so profile, email, password, and session actions use
-provisional paths plus development-only records in `reyvo.account.v1` and `reyvo.sessions.v1`.
-Development verifies the current password against the live login route and keeps changes in this
-browser; production reports the action as unavailable instead of faking an API write. The email note
-explains that the server still holds the original address until the endpoint ships. See
-[`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#account-settings-not-implemented).
+The account actions are server-backed: `PATCH /auth/me` and `PUT /auth/profile` update the display
+name, `POST /auth/email-change` starts a 24-hour pending change (confirmed signed-out through
+`POST /auth/email-change/confirm`, cancelled with `DELETE /auth/email-change`), and the password and
+session routes live with the security endpoints. `UserRead` exposes the pending address and its
+expiry, so the UI can restore the pending state after reload. Development fallbacks in
+`reyvo.account.v1` and `reyvo.sessions.v1` remain only for an older API that answers `404`/`405`;
+production never fakes an API write. See [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md).
 
 ### Companies
 
@@ -356,8 +359,8 @@ explains that the server still holds the original address until the endpoint shi
 - **Delete** — confirmation explains that contacts stay in the workspace and are detached, matching
   `DELETE /companies/{id}`.
 - **Permissions** — owner and admin get write controls; members get a read-only notice and no create,
-  edit, or delete affordances. The API build has no RBAC on `/companies`, so this is a UI policy plus
-  graceful 403 handling for when it is enforced server-side.
+  edit, or delete affordances. The API enforces the same rule on `/companies` writes, and the UI
+  still handles a `403` gracefully on reads and writes.
 
 `src/lib/companies.js` owns normalization, validation, payload mapping, and duplicate detection.
 
@@ -385,8 +388,8 @@ explains that the server still holds the original address until the endpoint shi
   builds store them per browser under `reyvo.contactTags.v1` and label the feature as browser-only;
   production reports tags as unavailable rather than pretending they reached the server.
 - **Permissions** — owner and admin get write controls; members get a read-only notice and no create,
-  edit, or delete affordances. The API has no RBAC on `/contacts`, so this is a UI policy plus graceful
-  403 handling for reads and writes.
+  edit, or delete affordances. The API enforces read-only membership on `/contacts` writes, import,
+  and export, and the UI handles `403`s gracefully on reads and writes.
 - **Export** — **Export view** downloads the current filtered list (search, status, and company), not
   just the visible page. The browser pages through `GET /contacts`, adds `status` and `created_at`,
   writes a UTF-8 BOM, and prefixes any cell that begins with `=`, `+`, `-`, or `@` with a single quote
@@ -648,6 +651,44 @@ import {
 **Component kit**) exercises every primitive with real state; the route is only registered in dev
 builds. Its layout styles are in `src/pages/app/ui-kit/ui-kit.css`; the components themselves are
 styled by `src/components/ui/ui.css`.
+
+### Workspace data and deletion
+
+`/app/settings/data` is owner-only. It packages the workspace archive in the browser from
+`GET /tenants/current/export`, which returns six CSVs (contacts, companies, campaigns, imports,
+suppressions, audit logs) as a JSON map; `src/lib/zip.js` writes them into one ZIP with no server-side
+ZIP dependency. The page lists the included files and reports API failures inline. Workspace deletion
+calls `DELETE /tenants/current` only after the owner types the workspace name, offers the export
+first, explains the 30-day purge window, and signs the owner out. The API blocks sign-in once the
+tenant is marked deleted.
+
+### Platform admin
+
+Platform staff are identified by `User.is_platform_admin`. The flag gates a dedicated **PLATFORM** nav
+group and three routes; tenant members never see the links, and direct visits are blocked by
+`AreaGuard` (`platformAdmin: true`).
+
+- **`/app/platform`** — paged tenant list with search over name, slug, owner email, and plan; a
+  status filter; and summary cards for tenants, MRR, contacts/companies, and abuse risk. Rows show
+  owner, plan and list-price MRR, usage, abuse risk, and active support access.
+- **`/app/platform/:tenantId`** — profile (owner, slug, plan, subscription, trial end, period end,
+  credit balance, timezone), usage, deliverability and abuse signals, and support grants. Actions:
+  suspend with a required reason and reactivate, extend trial 30 days, change plan
+  (`trial`/`starter`/`growth`/`scale`, with MRR from `PLAN_MRR_CENTS` in `admin.py`), apply a credit
+  with a reason, reset MFA for owners/admins, force logout, and delete with the workspace name typed
+  to confirm. Every action refreshes the profile and writes an audit event.
+- **`/app/platform/ops`** — five tabs: **Overview** (platform counts and a risk/size-sorted tenant
+  table), **Health** (`/health` + `/health/ready`, inbox states, high-risk tenants, kill-switch
+  state), **Audit log** (free-text search plus actor, tenant, and exact-action filters with
+  pagination and clear-filters), **Support access** (active or all grants with revoke), and **Abuse**
+  (high/medium/low counts against documented thresholds).
+
+Support access is a first-class server model: every grant requires a reason, expires automatically,
+is revocable, and is visible to the tenant on `/app/settings/security` through
+`GET /tenants/current/support-access`. Platform admins bypass the tenant-usable check when signing
+in, refreshing, or verifying MFA so they can enter and reactivate their own suspended workspace;
+tenant members remain blocked. The global sending kill switch stays on `/app/admin` and is
+platform-staff only.
 
 ### Authentication decision
 

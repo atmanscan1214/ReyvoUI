@@ -1,7 +1,7 @@
 # Reyvo — Remaining Build Backlog
 
 Source of truth: `ReyvoAPI/ReyvoApi/Reyvo_Detailed_Design_Document.md`
-Last updated: 25 November 2026
+Last updated: 28 November 2026
 
 This backlog covers the **in-product application** described in §5 of the design document. The
 marketing site and auth entry pages already exist and are not repeated here.
@@ -903,20 +903,55 @@ marketing site and auth entry pages already exist and are not repeated here.
 
 ## Platform admin
 
-- [ ] **T46 — Tenant management console** · L · deps: T07 · §5.9.1
-  - **Reopened 21 Nov 2026:** no platform-staff console exists. All nine `/admin/tenants*`
-    operations (list, profile, suspend, reactivate, trial extend, plan change, credit, MFA reset,
-    force logout, delete) are unused.
-  - Search by name/slug/owner/plan/status; tenant profile, usage, inboxes, campaigns, health, MRR.
-  - Note: the old `/app/admin` placeholder was reassigned to T30 ("Sending controls",
-    owner/admin) — T46 must add its own platform-staff route and nav area.
+- [x] **T46 — Tenant management console** · L · deps: T07 · §5.9.1
+  - **Completed 28 Nov 2026:** platform staff have dedicated `/app/platform` and
+    `/app/platform/:tenantId` routes behind the `platformAdmin` guard, plus a **PLATFORM** nav
+    group (Sending controls, Tenants, Platform ops) that only renders for that flag. The old
+    `/app/admin` placeholder stays with T30 (Sending controls, owner/admin).
+  - **Tenant list** (`PlatformTenantsPage`): paged `/admin/tenants` with a 300 ms search over name,
+    slug, owner email, and plan, a status filter (trial, active, suspended, past due, canceled,
+    deleted), and summary stats for tenants, MRR, contacts/companies, and abuse risk. Rows show
+    owner, plan and list-price MRR, contacts, campaigns, abuse risk, and active support access.
+  - **Tenant profile** (`PlatformTenantDetailPage`): owner, slug, plan, subscription state, trial
+    end, current period end, credit balance, timezone; usage facts for contacts, companies,
+    campaigns, messages, replies, seats, inboxes, and MRR; deliverability and abuse signals; and a
+    support-access panel with reason, duration, expiry, and revoke.
+  - **Account actions:** suspend (reason required) and reactivate, extend trial 30 days, change plan
+    (trial/starter/growth/scale, MRR from `PLAN_MRR_CENTS`), apply a credit with a reason, reset MFA
+    for owners/admins, force logout, and delete with the workspace name typed to confirm. Every
+    action refreshes the profile and writes an audit event.
+  - **API:** `reyvo/api/v1/admin.py` now serves tenant profile, overview, support access, filtered
+    audit search, suspend/reactivate, trial extend, plan change, credit ledger, MFA reset, force
+    logout, and delete. `Tenant` gained suspension/deletion columns, and `SupportAccessGrant` is a
+    first-class model with a mandatory reason and automatic expiry.
+  - Platform admins bypass the tenant-usable check in `authenticate`, `principal_from_access_token`,
+    `refresh`, and MFA login verification, so staff can sign in to and reactivate a suspended
+    workspace; tenant members remain blocked.
+  - Verified live as a platform admin: list renders the demo tenant with owner/plan/risk, profile
+    facts and usage load, support grant creation appears for the tenant, suspend shows the banner
+    and reactivate clears it, trial moved Nov 24 → Dec 24, plan changed to Growth ($499 MRR), and a
+    $25 credit updated the balance. `tests/test_admin_console.py` covers the lifecycle, RBAC, and
+    self-suspend reactivation; full API suite 230 passed; `npm run build` passes.
   - Done when: suspend, reactivate, trial extension, plan change, credit, MFA reset, force logout, flags work.
 
-- [ ] **T47 — Platform usage, health, audit, support, abuse** · L · deps: T46 · §5.9.2–§5.9.6
-  - **Reopened 21 Nov 2026:** no platform usage/health/audit UI exists. `GET /admin/audit-logs` is
-    unused, and `/app/status` calls a non-existent `/api/v1/status` instead of `/health` +
-    `/health/ready`.
-  - Usage and limits; queue/provider/API health; audit search; time-boxed support access; abuse signals and kill switches.
+- [x] **T47 — Platform usage, health, audit, support, abuse** · L · deps: T46 · §5.9.2–§5.9.6
+  - **Completed 28 Nov 2026:** `/app/platform/ops` (`PlatformOpsPage`) has five tabs.
+    **Overview** shows platform-wide tenants/MRR/contacts/messages/campaigns/inboxes/abuse/support
+    counts plus a tenant table sorted by risk and size. **Health** probes `GET /health` and
+    `GET /health/ready`, shows API/dependency state, connected and paused inboxes, high-risk
+    tenants, and the platform kill-switch state with a link to Sending controls. **Audit log**
+    searches `/admin/audit-logs` with a free-text box (action, entity, IP, user agent), actor
+    (user/platform admin/system), tenant, exact action, pagination, and clear-filters. **Support
+    access** lists active or all grants with tenant, reason, grant and expiry times, and revoke.
+    **Abuse** shows high/medium/low counts against documented thresholds and a risk-sorted tenant
+    table.
+  - The tenant-facing side of support access is a card on `/app/settings/security` backed by
+    `GET /tenants/current/support-access`, so a workspace always sees who currently has access and
+    why. Grants expire automatically and are never silent.
+  - Verified live: all five tabs render with no console errors, audit filtering by
+    `admin.tenant_suspended` returned only the two matching events, the active support grant was
+    visible to the tenant, and every page passed 375 / 768 / 1024 / 1440 px with no document-level
+    horizontal overflow. Tables scroll inside their wrappers and the tab strip scrolls on mobile.
   - Done when: support access requires a reason, expires automatically, and is visible to the tenant.
 
 ## Public pages

@@ -333,6 +333,37 @@ export const APP_AREAS = {
       'The global kill switch is enforced by the sender and editable only by platform staff; tenant roles see a staff-only panel.',
     ],
   },
+  platform: {
+    path: 'platform',
+    label: 'Tenants',
+    title: 'Tenant management',
+    icon: Building,
+    task: 'T46',
+    platformAdmin: true,
+    description:
+      'Search every workspace, inspect usage and abuse signals, and apply platform-level account actions.',
+    bullets: [
+      'Search by name, slug, owner, plan, or status and open a full tenant profile.',
+      'Usage, inbox health, campaigns, MRR, credits, and support access in one place.',
+      'Suspend, reactivate, extend a trial, change plan, apply credit, reset MFA, force sign-out, and delete.',
+    ],
+  },
+  platformOps: {
+    path: 'platform/ops',
+    label: 'Platform ops',
+    title: 'Platform operations',
+    icon: Chart,
+    task: 'T47',
+    platformAdmin: true,
+    description:
+      'Platform-wide usage, API health, audit search, time-boxed support access, and abuse signals.',
+    bullets: [
+      'Usage, limits, connected inboxes, and monthly recurring revenue across every tenant.',
+      'API and dependency health, plus the platform kill-switch state.',
+      'Searchable audit log and support grants that require a reason and expire automatically.',
+      'Abuse risk thresholds with the tenants that crossed them ranked first.',
+    ],
+  },
 }
 
 export const NAV_GROUPS = [
@@ -354,7 +385,7 @@ export const NAV_GROUPS = [
   },
   {
     label: 'Platform',
-    items: ['admin'],
+    items: ['admin', 'platform', 'platformOps'],
   },
 ]
 

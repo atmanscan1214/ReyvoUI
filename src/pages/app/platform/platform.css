@@ -1,0 +1,750 @@
+/* ---------------------------------------------------------------------------
+   Platform administration (T46 tenants, T47 operations)
+   --------------------------------------------------------------------------- */
+
+.platform-page {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.platform-muted {
+  color: var(--muted);
+}
+
+.platform-link {
+  color: var(--ink-soft);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
+
+.platform-link:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
+
+/* Stats ------------------------------------------------------------------- */
+
+.platform-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.platform-stat {
+  display: grid;
+  gap: 7px;
+  padding: 17px 19px;
+  min-width: 0;
+}
+
+.platform-stat span {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.platform-stat strong {
+  font-size: clamp(1.45rem, 2.2vw, 1.9rem);
+  line-height: 1.1;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.platform-stat small {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.platform-stat--success strong {
+  color: var(--success);
+}
+
+.platform-stat--warning strong {
+  color: var(--warning-ink, #8a5a12);
+}
+
+/* List -------------------------------------------------------------------- */
+
+.platform-tenant {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.platform-tenant__name {
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.platform-tenant__slug {
+  font-size: 0.73rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.platform-tenant__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.platform-owner,
+.platform-reason {
+  overflow-wrap: anywhere;
+}
+
+.platform-plan {
+  display: grid;
+  gap: 1px;
+}
+
+.platform-plan small {
+  font-size: 0.73rem;
+  color: var(--muted);
+}
+
+.platform-nowrap {
+  white-space: nowrap;
+}
+
+.platform-code {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper-deep);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.platform-actor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Notices ----------------------------------------------------------------- */
+
+.platform-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.platform-note svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ink-soft);
+}
+
+.platform-note--warning {
+  border-color: #e6d3a1;
+  background: #fdf7e8;
+  color: #6b5014;
+}
+
+.platform-note--warning svg {
+  color: #8a5a12;
+}
+
+.platform-banner {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 17px;
+  border: 1px solid var(--danger);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--paper));
+  color: var(--danger);
+}
+
+.platform-banner > div {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.platform-banner strong {
+  color: var(--ink);
+}
+
+.platform-banner span {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Denied / error ---------------------------------------------------------- */
+
+.platform-denied {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: clamp(28px, 5vw, 48px);
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.platform-denied h2 {
+  font-size: 1.12rem;
+}
+
+.platform-denied p {
+  max-width: 480px;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--ink-muted);
+}
+
+.platform-denied__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+/* Detail layout ----------------------------------------------------------- */
+
+.platform-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(270px, 0.75fr);
+  gap: clamp(16px, 2.2vw, 22px);
+  align-items: start;
+  min-width: 0;
+}
+
+.platform-detail__main,
+.platform-detail__aside,
+.platform-panel-stack {
+  display: grid;
+  gap: clamp(16px, 2.2vw, 22px);
+  min-width: 0;
+}
+
+.platform-panel {
+  display: grid;
+  gap: 15px;
+  padding: 20px;
+  min-width: 0;
+}
+
+.platform-panel--danger {
+  border-color: #ecc8c2;
+  background: #fffbf9;
+}
+
+.platform-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.platform-panel__head > div {
+  min-width: 0;
+}
+
+.platform-panel h2 {
+  margin: 3px 0 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.platform-panel__lead {
+  margin: 0;
+  font-size: 0.81rem;
+  line-height: 1.65;
+  color: var(--ink-muted);
+}
+
+.platform-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* Facts ------------------------------------------------------------------- */
+
+.platform-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 22px;
+}
+
+.platform-facts > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+  min-width: 0;
+}
+
+.platform-facts dt {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.platform-facts dd {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  min-width: 0;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.platform-facts dd span {
+  font-size: 0.75rem;
+}
+
+/* Usage ------------------------------------------------------------------- */
+
+.platform-usage {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.platform-usage__item {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-deep);
+  min-width: 0;
+}
+
+.platform-usage__item span {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.platform-usage__item strong {
+  font-size: 1.2rem;
+  color: var(--ink);
+}
+
+.platform-usage__item small {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* Abuse ------------------------------------------------------------------- */
+
+.platform-abuse {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.platform-abuse > div {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-deep);
+  min-width: 0;
+}
+
+.platform-abuse span {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.platform-abuse strong {
+  font-size: 1.2rem;
+  color: var(--ink);
+}
+
+.platform-abuse small {
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* Support grants ---------------------------------------------------------- */
+
+.platform-grants {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.platform-grant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-deep);
+  min-width: 0;
+}
+
+.platform-grant__main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.platform-grant__main strong {
+  font-size: 0.83rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.platform-grant__main span {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.platform-grants--muted {
+  margin-top: 10px;
+}
+
+.platform-grants--muted .platform-grant {
+  background: var(--surface);
+}
+
+.platform-grant-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.platform-grant-form .platform-field {
+  flex: 1 1 260px;
+}
+
+.platform-grant-form .platform-field--narrow {
+  flex: 0 1 150px;
+}
+
+.platform-grant-history {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.platform-grant-history summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  list-style: none;
+}
+
+.platform-grant-history summary::-webkit-details-marker {
+  display: none;
+}
+
+.platform-grant-history summary:hover {
+  color: var(--ink);
+}
+
+/* Fields ------------------------------------------------------------------ */
+
+.platform-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  min-width: 0;
+}
+
+.platform-field > span {
+  line-height: 1.45;
+}
+
+.platform-field textarea,
+.platform-field input,
+.platform-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--paper);
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.platform-field textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.platform-form-grid {
+  display: grid;
+  gap: 13px;
+}
+
+.platform-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #ecc8c2;
+  border-radius: 9px;
+  background: var(--danger-soft);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--danger);
+}
+
+/* Action list ------------------------------------------------------------- */
+
+.platform-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.platform-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-deep);
+  min-width: 0;
+}
+
+.platform-action > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.platform-action strong {
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.platform-action span {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* Health ------------------------------------------------------------------ */
+
+.platform-health {
+  display: grid;
+  gap: 9px;
+}
+
+.platform-health__check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-deep);
+  min-width: 0;
+}
+
+.platform-health__check > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.platform-health__check strong {
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.platform-health__check span {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.platform-killswitch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-deep);
+}
+
+.platform-killswitch > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.platform-killswitch strong {
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+
+.platform-killswitch span {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Filters ----------------------------------------------------------------- */
+
+.platform-inline-field {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.platform-inline-field .ui-input {
+  min-width: 0;
+}
+
+.platform-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.platform-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--ink);
+}
+
+/* Responsive -------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .platform-stats,
+  .platform-usage,
+  .platform-abuse {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .platform-detail {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .platform-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .platform-banner,
+  .platform-killswitch,
+  .platform-action {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .platform-banner .btn,
+  .platform-killswitch .btn,
+  .platform-action .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .platform-grant {
+    flex-wrap: wrap;
+  }
+
+  .platform-grant .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .platform-grant-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .platform-grant-form .platform-field,
+  .platform-grant-form .platform-field--narrow {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .platform-stats,
+  .platform-usage,
+  .platform-abuse {
+    grid-template-columns: 1fr;
+  }
+
+  .platform-panel {
+    padding: 16px;
+  }
+
+  .platform-facts > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .platform-panel__head {
+    flex-wrap: wrap;
+  }
+
+  .platform-health__check {
+    flex-wrap: wrap;
+  }
+}

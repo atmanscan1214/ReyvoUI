@@ -39,6 +39,9 @@ import { MailboxesPage } from './pages/app/mailboxes/MailboxesPage'
 import { MailboxDetailPage } from './pages/app/mailboxes/MailboxDetailPage'
 import { MailboxHealthPage } from './pages/app/mailboxes/MailboxHealthPage'
 import { AdminPage } from './pages/app/admin/AdminPage'
+import { PlatformTenantsPage } from './pages/app/platform/PlatformTenantsPage'
+import { PlatformTenantDetailPage } from './pages/app/platform/PlatformTenantDetailPage'
+import { PlatformOpsPage } from './pages/app/platform/PlatformOpsPage'
 import { BillingPage } from './pages/app/billing/BillingPage'
 import { NotificationsPage } from './pages/app/notifications/NotificationsPage'
 import { WorkspaceSettingsPage } from './pages/app/settings/WorkspaceSettingsPage'
@@ -55,23 +58,14 @@ import { UnsubscribePage } from './pages/app/unsubscribe/UnsubscribePage'
 import { SessionProvider } from './lib/session'
 import './components/ui/ui.css'
 
-const AREA_ROUTES = Object.entries(APP_AREAS).filter(
-  ([key]) =>
-    key !== 'dashboard' &&
-    key !== 'security' &&
-    key !== 'account' &&
-    key !== 'settings' &&
-    key !== 'data' &&
-    key !== 'team' &&
-    key !== 'companies' &&
-    key !== 'contacts' &&
-    key !== 'lists' &&
-    key !== 'imports' &&
-    key !== 'suppressions' &&
-    key !== 'mailboxes' &&
-    key !== 'campaigns' &&
-    key !== 'notifications',
-)
+const EXPLICIT_ROUTES = new Set([
+  'dashboard', 'security', 'account', 'settings', 'data', 'team',
+  'companies', 'contacts', 'lists', 'imports', 'suppressions',
+  'mailboxes', 'campaigns', 'notifications', 'platform', 'platformOps',
+  'replies', 'pipeline', 'tasks', 'reports', 'billing', 'admin'
+])
+
+const AREA_ROUTES = Object.entries(APP_AREAS).filter(([key]) => !EXPLICIT_ROUTES.has(key))
 
 export default function App() {
   return (
@@ -188,6 +182,30 @@ export default function App() {
                 element={
                   <AreaGuard area={APP_AREAS.admin}>
                     <AdminPage />
+                  </AreaGuard>
+                }
+              />
+              <Route
+                path="platform"
+                element={
+                  <AreaGuard area={APP_AREAS.platform}>
+                    <PlatformTenantsPage />
+                  </AreaGuard>
+                }
+              />
+              <Route
+                path="platform/ops"
+                element={
+                  <AreaGuard area={APP_AREAS.platformOps}>
+                    <PlatformOpsPage />
+                  </AreaGuard>
+                }
+              />
+              <Route
+                path="platform/:tenantId"
+                element={
+                  <AreaGuard area={APP_AREAS.platform}>
+                    <PlatformTenantDetailPage />
                   </AreaGuard>
                 }
               />

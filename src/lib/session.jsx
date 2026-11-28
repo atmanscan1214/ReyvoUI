@@ -93,7 +93,7 @@ export function SessionProvider({ children }) {
       })
 
     return () => controller.abort()
-  }, [session?.tenant?.id, profileAttempt])
+  }, [session?.accessToken, session?.tenant?.id, profileAttempt])
 
   useEffect(() => {
     if (!session?.accessToken || !session?.tenant?.id) {
@@ -118,7 +118,7 @@ export function SessionProvider({ children }) {
       })
 
     return () => controller.abort()
-  }, [session?.tenant?.id, tenantAttempt])
+  }, [session?.accessToken, session?.tenant?.id, tenantAttempt])
 
   function retryProfile() {
     setProfileAttempt((attempt) => attempt + 1)
